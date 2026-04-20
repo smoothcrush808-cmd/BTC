@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC MA LIGHT</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b10;
+    --bg2: #0d1117;
+    --border: #1e2d3d;
+    --border2: #243447;
+    --btc: #f7931a;
+    --btc-dim: #a05c0f;
+    --up: #00e5a0;
+    --down: #ff4466;
+    --down-dim: #7a1f30;
+    --neutral: #5a7a99;
+    --text: #c8d8e8;
+    --text-dim: #4a6278;
+    --brake: #ffcc00;
+    --accel: #00ccff;
+    --mono: 'Share Tech Mono', monospace;
+    --display: 'Bebas Neue', sans-serif;
+    --body: 'Noto Sans KR', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    min-height: 100vh;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(247,147,26,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(247,147,26,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none; z-index:0;
+  }
+  .container { position:relative; z-index:1; max-width:900px; margin:0 auto; padding:24px 16px; }
+
+  /* 헤더 */
+  .header {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border);
+  }
+  .logo { font-family:var(--display); font-size:42px; letter-spacing:4px; color:var(--btc); line-height:1; text-shadow:0 0 30px rgba(247,147,26,0.4); }
+  .logo span { color:var(--text-dim); font-size:28px; }
+  .subtitle { font-family:var(--mono); font-size:10px; color:var(--text-dim); letter-spacing:3px; margin-top:2px; }
+  .price-area { text-align:right; }
+  .current-price { font-family:var(--mono); font-size:28px; color:var(--text); }
+  .current-price.up { color:var(--up); }
+  .current-price.down { color:var(--down); }
+  .price-label { font-size:10px; color:var(--text-dim); letter-spacing:2px; }
+
+  /* 버튼 */
+  .scan-btn {
+    width:100%; padding:16px; background:transparent;
+    border:1px solid var(--btc); color:var(--btc);
+    font-family:var(--display); font-size:22px; letter-spacing:6px;
+    cursor:pointer; position:relative; overflow:hidden; transition:all 0.2s; margin-bottom:24px;
+  }
+  .scan-btn::before {
+    content:''; position:absolute; inset:0; background:var(--btc);
+    transform:translateX(-100%); transition:transform 0.2s; z-index:-1;
+  }
+  .scan-btn:hover::before { transform:translateX(0); }
+  .scan-btn:hover { color:var(--bg); }
+  .scan-btn:disabled { opacity:0.4; cursor:not-allowed; color:var(--btc); }
+  .scan-btn:disabled::before { transform:translateX(-100%); }
+
+  /* 로딩 */
+  .loading { display:none; text-align:center; padding:40px; font-family:var(--mono); font-size:12px; color:var(--btc-dim); letter-spacing:3px; }
+  .loading.active { display:block; }
+  .loading-dots span { animation:blink 1.2s infinite; opacity:0; }
+  .loading-dots span:nth-child(2) { animation-delay:0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay:0.4s; }
+  @keyframes blink { 0%,100%{opacity:0} 50%{opacity:1} }
+
+  /* 결과 */
+  .result { display:none; }
+  .result.active { display:block; }
+
+  .tf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
+  @media(max-width:600px){ .tf-grid{grid-template-columns:1fr;} }
+
+  .tf-card {
+    background:var(--bg2); border:1px solid var(--border);
+    padding:16px; position:relative; overflow:hidden;
+    animation:fadeIn 0.4s ease both;
+  }
+  .tf-card:nth-child(2){animation-delay:0.1s}
+  .tf-card:nth-child(3){animation-delay:0.2s}
+  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  .tf-card::before { content:''; position:absolute; top:0;left:0;right:0; height:2px; background:var(--border2); }
+  .tf-card.bullish::before    { background:var(--up); }
+  .tf-card.bearish::before    { background:var(--down); }
+  .tf-card.brake-s::before    { background:var(--brake); }
+  .tf-card.accel-s::before    { background:var(--accel); }
+  .tf-card.mixed::before      { background:var(--neutral); }
+
+  .tf-label { font-family:var(--display); font-size:28px; letter-spacing:2px; color:var(--text-dim); margin-bottom:12px; }
+
+  .ma-row { display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .ma-item { text-align:center; }
+  .ma-name { font-family:var(--mono); font-size:9px; color:var(--text-dim); letter-spacing:1px; margin-bottom:2px; }
+  .ma-val  { font-family:var(--mono); font-size:11px; color:var(--text); }
+
+  .alignment { font-family:var(--mono); font-size:11px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+  .al-label { color:var(--text-dim); font-size:9px; letter-spacing:1px; }
+  .al-bull  { color:var(--up); }
+  .al-bear  { color:var(--down); }
+  .al-mixed { color:var(--neutral); }
+
+  .metrics { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+  .metric-row { display:flex; justify-content:space-between; align-items:center; }
+  .mn { font-family:var(--mono); font-size:9px; color:var(--text-dim); letter-spacing:1px; }
+  .mv { font-family:var(--mono); font-size:12px; }
+  .pos{color:var(--up)} .neg{color:var(--down)} .zero{color:var(--neutral)}
+
+  .sig-badge { display:inline-block; padding:4px 10px; font-family:var(--display); font-size:16px; letter-spacing:2px; border:1px solid; }
+  .sig-go     { color:var(--up);      border-color:var(--up);      background:rgba(0,229,160,0.07); }
+  .sig-stop   { color:var(--down);    border-color:var(--down);    background:rgba(255,68,102,0.07); }
+  .sig-brake  { color:var(--brake);   border-color:var(--brake);   background:rgba(255,204,0,0.07); }
+  .sig-accel  { color:var(--accel);   border-color:var(--accel);   background:rgba(0,204,255,0.07); }
+  .sig-neutral{ color:var(--neutral); border-color:var(--neutral); background:rgba(90,122,153,0.07); }
+
+  .summary-panel { background:var(--bg2); border:1px solid var(--border); padding:16px 20px; animation:fadeIn 0.4s 0.3s ease both; }
+  .sum-title { font-family:var(--mono); font-size:9px; color:var(--text-dim); letter-spacing:3px; margin-bottom:12px; }
+  .sum-body  { font-family:var(--mono); font-size:13px; color:var(--text); line-height:1.9; }
+  .sum-body .hl   { color:var(--btc); }
+  .sum-body .ut   { color:var(--up); }
+  .sum-body .dt   { color:var(--down); }
+  .sum-body .wt   { color:var(--brake); }
+  .sum-body .it   { color:var(--accel); }
+
+  .timestamp { text-align:right; font-family:var(--mono); font-size:9px; color:var(--text-dim); margin-top:12px; letter-spacing:1px; }
+
+  .error-msg { display:none; text-align:center; padding:20px; font-family:var(--mono); font-size:11px; color:var(--down); letter-spacing:1px; border:1px solid var(--down-dim); background:rgba(255,68,102,0.05); line-height:1.9; margin-bottom:12px; }
+  .error-msg.active { display:block; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <div class="logo">BTC <span>MA</span></div>
+      <div class="subtitle">MOMENTUM · ACCELERATION · ALIGNMENT</div>
+    </div>
+    <div class="price-area">
+      <div class="price-label">BTCUSDT PERP</div>
+      <div class="current-price" id="currentPrice">---</div>
+    </div>
+  </div>
+
+  <button class="scan-btn" id="scanBtn" onclick="fetchAll()">SCAN</button>
+  <div class="loading" id="loading">FETCHING DATA <span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></div>
+  <div class="error-msg" id="errorMsg"></div>
+
+  <div class="result" id="result">
+    <div class="tf-grid" id="tfGrid"></div>
+    <div class="summary-panel">
+      <div class="sum-title">SUMMARY</div>
+      <div class="sum-body" id="sumBody"></div>
+    </div>
+    <div class="timestamp" id="ts"></div>
+  </div>
+
+</div>
+<script>
+const TFS = [
+  { label:'4H',  gran:'4H',  limit:60 },
+  { label:'1H',  gran:'1H',  limit:60 },
+  { label:'15M', gran:'15m', limit:60 },
+];
+
+async function fetchCandles(gran, limit) {
+  const api = `https://api.bitget.com/api/v2/mix/market/candles?symbol=BTCUSDT&productType=usdt-futures&granularity=${gran}&limit=${limit}`;
+
+  // 1순위: Bitget 직접 호출 (Bitget API는 CORS 허용)
+  // 2순위: corsproxy.io (fallback, 직접 호출 차단 시)
+  const attempts = [
+    { name: 'direct',    url: api },
+    { name: 'corsproxy', url: `https://corsproxy.io/?${encodeURIComponent(api)}` },
+  ];
+
+  const errors = [];
+  for (const { name, url } of attempts) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        errors.push(`${name}: HTTP ${res.status}`);
+        continue;
+      }
+
+      const text = await res.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (parseErr) {
+        errors.push(`${name}: JSON parse failed (${text.slice(0, 50)}...)`);
+        continue;
+      }
+
+      if (!json.data || json.data.length === 0) {
+        errors.push(`${name}: empty data (code=${json.code || 'N/A'}, msg=${json.msg || 'N/A'})`);
+        continue;
+      }
+
+      console.log(`[BTC MA] ${gran} fetched via ${name}, ${json.data.length} candles`);
+      return json.data.map(d => parseFloat(d[4])).reverse(); // close prices, oldest first
+
+    } catch (e) {
+      clearTimeout(timeoutId);
+      errors.push(`${name}: ${e.name === 'AbortError' ? 'timeout(15s)' : e.message}`);
+    }
+  }
+
+  throw new Error(`[${gran}] ${errors.join(' | ')}`);
+}
+
+const ma = (cls, n) => cls.map((_,i) =>
+  i < n-1 ? null : cls.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n
+);
+
+const momentum = (cls, ma5) => cls.map((_,i) => {
+  if (i < 5 || !ma5[i]) return null;
+  const slice = cls.slice(i-4, i+1);
+  let sum = cls[i-4] - cls[i-5];
+  for (let j=1;j<slice.length;j++) sum += slice[j]-slice[j-1];
+  return (sum/5) / ma5[i] * 100;
+});
+
+const accel = mom => mom.map((m,i) =>
+  (!i || m===null || mom[i-1]===null) ? null : m - mom[i-1]
+);
+
+function analyze(closes) {
+  const m5  = ma(closes,5);
+  const m10 = ma(closes,10);
+  const m20 = ma(closes,20);
+  const mom = momentum(closes, m5);
+  const acc = accel(mom);
+  const i   = closes.length-1;
+  const [ma5,ma10,ma20,mo,ac] = [m5[i],m10[i],m20[i],mom[i],acc[i]];
+
+  let align = '혼조';
+  if (ma5&&ma10&&ma20) {
+    const a=(ma5-ma10)/ma10*100, b=(ma5-ma20)/ma20*100, c=(ma10-ma20)/ma20*100;
+    if(a>0&&b>0&&c>0) align='정배열';
+    else if(a<0&&b<0&&c<0) align='역배열';
+  }
+
+  let sig = 'NEUTRAL';
+  if (mo!==null&&ac!==null) {
+    if(mo>0&&ac<0) sig='BRAKE';
+    else if(mo<0&&ac>0) sig='ACCEL';
+    else if(align==='정배열'&&mo>0) sig='GO';
+    else if(align==='역배열'&&mo<0) sig='STOP';
+  }
+
+  return { price:closes[i], ma5, ma10, ma20, mom:mo, accel:ac, align, sig };
+}
+
+const fp = n => n?.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1}) ?? '---';
+const fv = (n,d=3) => n==null?'---':(n>=0?'+':'')+n.toFixed(d);
+const mc = v => v>0?'pos':v<0?'neg':'zero';
+
+function renderCard(lbl, d) {
+  const cc = {GO:'bullish',STOP:'bearish',BRAKE:'brake-s',ACCEL:'accel-s'}[d.sig]||'mixed';
+  const ac = {'정배열':'al-bull','역배열':'al-bear','혼조':'al-mixed'}[d.align];
+  const bc = {GO:'sig-go',STOP:'sig-stop',BRAKE:'sig-brake',ACCEL:'sig-accel',NEUTRAL:'sig-neutral'}[d.sig];
+  const sl = {GO:'▲ GO',STOP:'▼ STOP',BRAKE:'⚠ BRAKE',ACCEL:'◎ ACCEL',NEUTRAL:'— HOLD'}[d.sig];
+  return `
+    <div class="tf-card ${cc}">
+      <div class="tf-label">${lbl}</div>
+      <div class="ma-row">
+        <div class="ma-item"><div class="ma-name">5MA</div><div class="ma-val">${fp(d.ma5)}</div></div>
+        <div class="ma-item"><div class="ma-name">10MA</div><div class="ma-val">${fp(d.ma10)}</div></div>
+        <div class="ma-item"><div class="ma-name">20MA</div><div class="ma-val">${fp(d.ma20)}</div></div>
+      </div>
+      <div class="alignment"><span class="al-label">배열</span><span class="${ac}">${d.align}</span></div>
+      <div class="metrics">
+        <div class="metric-row"><span class="mn">MOMENTUM</span><span class="mv ${mc(d.mom)}">${fv(d.mom)}%</span></div>
+        <div class="metric-row"><span class="mn">ACCEL</span><span class="mv ${mc(d.accel)}">${fv(d.accel)}</span></div>
+      </div>
+      <span class="sig-badge ${bc}">${sl}</span>
+    </div>`;
+}
+
+function buildSummary(results) {
+  const sigs   = results.map(r=>r.sig);
+  const aligns = results.map(r=>r.align);
+  const lbls   = ['4H','1H','15M'];
+  const lines  = [];
+
+  const bulls=aligns.filter(a=>a==='정배열').length;
+  const bears=aligns.filter(a=>a==='역배열').length;
+  if(bulls===3)      lines.push(`<span class="ut">▲ 전 타임프레임 정배열</span> — 상승 환경 우세`);
+  else if(bears===3) lines.push(`<span class="dt">▼ 전 타임프레임 역배열</span> — 하락 환경 우세`);
+  else               lines.push(`<span class="hl">배열 혼조</span> — `+lbls.map((l,i)=>`${l}:${aligns[i]}`).join(' / '));
+
+  const bn=sigs.filter(s=>s==='BRAKE').length;
+  const an=sigs.filter(s=>s==='ACCEL').length;
+  const gn=sigs.filter(s=>s==='GO').length;
+  const sn=sigs.filter(s=>s==='STOP').length;
+
+  if(bn>=2) lines.push(`<span class="wt">⚠ BRAKE ${bn}개</span> — 고점 경고, 신규 진입 자제`);
+  if(an>=2) lines.push(`<span class="it">◎ ACCEL ${an}개</span> — 바닥 탐색, 반등 가능성 주시`);
+  if(gn===3) lines.push(`<span class="ut">▲ 전 타임프레임 GO</span> — 강한 매수 환경`);
+  if(sn===3) lines.push(`<span class="dt">▼ 전 타임프레임 STOP</span> — 강한 매도 환경`);
+
+  lines.push(lbls.map((l,i)=>{
+    const s=sigs[i];
+    const c={GO:'ut',STOP:'dt',BRAKE:'wt',ACCEL:'it'}[s]||'';
+    return `${l}:<span class="${c}">${s}</span>`;
+  }).join('  ·  '));
+
+  return lines.map(l=>`<div style="margin-bottom:4px">${l}</div>`).join('');
+}
+
+async function fetchAll() {
+  const btn=document.getElementById('scanBtn');
+  const ldg=document.getElementById('loading');
+  const res=document.getElementById('result');
+  const err=document.getElementById('errorMsg');
+
+  btn.disabled=true;
+  ldg.classList.add('active');
+  res.classList.remove('active');
+  err.classList.remove('active');
+
+  try {
+    const allCloses = await Promise.all(TFS.map(tf=>fetchCandles(tf.gran,tf.limit)));
+    const results   = allCloses.map(analyze);
+
+    document.getElementById('currentPrice').textContent = fp(results[0].price);
+    document.getElementById('tfGrid').innerHTML = TFS.map((tf,i)=>renderCard(tf.label,results[i])).join('');
+    document.getElementById('sumBody').innerHTML = buildSummary(results);
+    document.getElementById('ts').textContent = 'UPDATED: '+new Date().toLocaleString('ko-KR');
+    res.classList.add('active');
+
+  } catch(e) {
+    console.error('[BTC MA] fetch failed:', e);
+    err.innerHTML = `
+      <div style="color:var(--down);font-size:13px;margin-bottom:8px">▼ 판단 불가 — 데이터 없음</div>
+      <div style="font-size:10px;opacity:0.7;text-align:left;white-space:pre-wrap;word-break:break-all;line-height:1.6">${e.message}</div>
+      <div style="font-size:9px;opacity:0.5;margin-top:8px">콘솔(F12)에서 상세 로그 확인 가능 · 네트워크 문제일 경우 잠시 후 재시도</div>
+    `;
+    err.classList.add('active');
+  } finally {
+    ldg.classList.remove('active');
+    btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>
