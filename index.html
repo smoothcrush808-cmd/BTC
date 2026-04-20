@@ -4,26 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BTC MA LIGHT</title>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
 <style>
   :root {
-    --bg: #080b10;
-    --bg2: #0d1117;
-    --border: #1e2d3d;
-    --border2: #243447;
+    --bg: #0a0e14;
+    --bg2: #10161f;
+    --border: #243447;
+    --border2: #2d4258;
     --btc: #f7931a;
     --btc-dim: #a05c0f;
-    --up: #00e5a0;
-    --down: #ff4466;
+    --up: #26e0a5;
+    --down: #ff5572;
     --down-dim: #7a1f30;
-    --neutral: #5a7a99;
-    --text: #c8d8e8;
-    --text-dim: #4a6278;
-    --brake: #ffcc00;
-    --accel: #00ccff;
-    --mono: 'Share Tech Mono', monospace;
-    --display: 'Bebas Neue', sans-serif;
-    --body: 'Noto Sans KR', sans-serif;
+    --neutral: #7a93ad;
+    --text: #e6edf3;
+    --text-dim: #8a9ab0;
+    --text-sub: #5a7088;
+    --brake: #ffcc33;
+    --accel: #33d4ff;
+    --mono: 'IBM Plex Mono', 'Menlo', 'Consolas', monospace;
+    --display: 'Inter', 'Pretendard Variable', sans-serif;
+    --body: 'Pretendard Variable', 'Inter', -apple-system, sans-serif;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -46,22 +50,35 @@
   /* 헤더 */
   .header {
     display:flex; align-items:flex-end; justify-content:space-between;
-    margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border);
+    margin-bottom:32px; padding-bottom:20px; border-bottom:1px solid var(--border);
+    gap:16px; flex-wrap:wrap;
   }
-  .logo { font-family:var(--display); font-size:42px; letter-spacing:4px; color:var(--btc); line-height:1; text-shadow:0 0 30px rgba(247,147,26,0.4); }
-  .logo span { color:var(--text-dim); font-size:28px; }
-  .subtitle { font-family:var(--mono); font-size:10px; color:var(--text-dim); letter-spacing:3px; margin-top:2px; }
-  .price-area { text-align:right; }
-  .current-price { font-family:var(--mono); font-size:28px; color:var(--text); }
-  .current-price.up { color:var(--up); }
-  .current-price.down { color:var(--down); }
-  .price-label { font-size:10px; color:var(--text-dim); letter-spacing:2px; }
+  .logo {
+    font-family:var(--display); font-size:44px; letter-spacing:2px;
+    color:var(--btc); line-height:1; font-weight:800;
+    text-shadow:0 0 30px rgba(247,147,26,0.25);
+  }
+  .logo span { color:var(--text-dim); font-size:30px; font-weight:600; margin-left:4px; }
+  .subtitle {
+    font-family:var(--mono); font-size:12px; color:var(--text-dim);
+    letter-spacing:2px; margin-top:6px; font-weight:500;
+  }
+  .header-right { text-align:right; }
+  .update-label {
+    font-family:var(--mono); font-size:11px; color:var(--text-sub);
+    letter-spacing:2px; font-weight:500;
+  }
+  .update-time {
+    font-family:var(--mono); font-size:15px; color:var(--text-dim);
+    font-weight:500; margin-top:4px; letter-spacing:0.5px;
+  }
+  .update-time.empty { color:var(--text-sub); }
 
   /* 버튼 */
   .scan-btn {
-    width:100%; padding:16px; background:transparent;
+    width:100%; padding:20px; background:transparent;
     border:1px solid var(--btc); color:var(--btc);
-    font-family:var(--display); font-size:22px; letter-spacing:6px;
+    font-family:var(--display); font-size:20px; letter-spacing:8px; font-weight:700;
     cursor:pointer; position:relative; overflow:hidden; transition:all 0.2s; margin-bottom:24px;
   }
   .scan-btn::before {
@@ -74,7 +91,7 @@
   .scan-btn:disabled::before { transform:translateX(-100%); }
 
   /* 로딩 */
-  .loading { display:none; text-align:center; padding:40px; font-family:var(--mono); font-size:12px; color:var(--btc-dim); letter-spacing:3px; }
+  .loading { display:none; text-align:center; padding:40px; font-family:var(--mono); font-size:13px; color:var(--btc-dim); letter-spacing:3px; font-weight:500; }
   .loading.active { display:block; }
   .loading-dots span { animation:blink 1.2s infinite; opacity:0; }
   .loading-dots span:nth-child(2) { animation-delay:0.2s; }
@@ -85,64 +102,137 @@
   .result { display:none; }
   .result.active { display:block; }
 
-  .tf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
-  @media(max-width:600px){ .tf-grid{grid-template-columns:1fr;} }
+  .tf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:16px; }
+  @media(max-width:600px){
+    .tf-grid{grid-template-columns:1fr; gap:12px;}
+    .container{padding:20px 14px;}
+  }
 
   .tf-card {
     background:var(--bg2); border:1px solid var(--border);
-    padding:16px; position:relative; overflow:hidden;
+    padding:20px; position:relative; overflow:hidden;
     animation:fadeIn 0.4s ease both;
   }
   .tf-card:nth-child(2){animation-delay:0.1s}
   .tf-card:nth-child(3){animation-delay:0.2s}
   @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
-  .tf-card::before { content:''; position:absolute; top:0;left:0;right:0; height:2px; background:var(--border2); }
+  .tf-card::before { content:''; position:absolute; top:0;left:0;right:0; height:3px; background:var(--border2); }
   .tf-card.bullish::before    { background:var(--up); }
   .tf-card.bearish::before    { background:var(--down); }
   .tf-card.brake-s::before    { background:var(--brake); }
   .tf-card.accel-s::before    { background:var(--accel); }
   .tf-card.mixed::before      { background:var(--neutral); }
 
-  .tf-label { font-family:var(--display); font-size:28px; letter-spacing:2px; color:var(--text-dim); margin-bottom:12px; }
+  .tf-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .tf-label {
+    font-family:var(--display); font-size:32px; letter-spacing:1px;
+    color:var(--text); font-weight:700; line-height:1;
+  }
 
-  .ma-row { display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .ma-row {
+    display:grid; grid-template-columns:1fr 1fr 1fr;
+    gap:8px; margin-bottom:14px; padding-bottom:14px;
+    border-bottom:1px solid var(--border);
+  }
   .ma-item { text-align:center; }
-  .ma-name { font-family:var(--mono); font-size:9px; color:var(--text-dim); letter-spacing:1px; margin-bottom:2px; }
-  .ma-val  { font-family:var(--mono); font-size:11px; color:var(--text); }
+  .ma-name {
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    letter-spacing:1.5px; margin-bottom:4px; font-weight:500;
+  }
+  .ma-val {
+    font-family:var(--mono); font-size:16px; color:var(--text);
+    font-weight:500; letter-spacing:-0.2px;
+  }
 
-  .alignment { font-family:var(--mono); font-size:11px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
-  .al-label { color:var(--text-dim); font-size:9px; letter-spacing:1px; }
+  .alignment {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:14px; padding:10px 12px;
+    background:rgba(255,255,255,0.02); border-radius:2px;
+  }
+  .al-label {
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    letter-spacing:1.5px; font-weight:500;
+  }
+  .al-val {
+    font-family:var(--body); font-size:17px; font-weight:600;
+    letter-spacing:0.5px;
+  }
   .al-bull  { color:var(--up); }
   .al-bear  { color:var(--down); }
   .al-mixed { color:var(--neutral); }
 
-  .metrics { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
-  .metric-row { display:flex; justify-content:space-between; align-items:center; }
-  .mn { font-family:var(--mono); font-size:9px; color:var(--text-dim); letter-spacing:1px; }
-  .mv { font-family:var(--mono); font-size:12px; }
+  .metrics { display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
+  .metric-row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:6px 2px;
+  }
+  .mn {
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    letter-spacing:1.5px; font-weight:500;
+  }
+  .mv {
+    font-family:var(--mono); font-size:17px; font-weight:500;
+    letter-spacing:-0.2px;
+  }
   .pos{color:var(--up)} .neg{color:var(--down)} .zero{color:var(--neutral)}
 
-  .sig-badge { display:inline-block; padding:4px 10px; font-family:var(--display); font-size:16px; letter-spacing:2px; border:1px solid; }
-  .sig-go     { color:var(--up);      border-color:var(--up);      background:rgba(0,229,160,0.07); }
-  .sig-stop   { color:var(--down);    border-color:var(--down);    background:rgba(255,68,102,0.07); }
-  .sig-brake  { color:var(--brake);   border-color:var(--brake);   background:rgba(255,204,0,0.07); }
-  .sig-accel  { color:var(--accel);   border-color:var(--accel);   background:rgba(0,204,255,0.07); }
-  .sig-neutral{ color:var(--neutral); border-color:var(--neutral); background:rgba(90,122,153,0.07); }
+  .sig-badge {
+    display:block; width:100%; text-align:center;
+    padding:12px 16px; font-family:var(--display);
+    font-size:20px; letter-spacing:3px; font-weight:700;
+    border:1px solid;
+  }
+  .sig-go     { color:var(--up);      border-color:var(--up);      background:rgba(38,224,165,0.08); }
+  .sig-stop   { color:var(--down);    border-color:var(--down);    background:rgba(255,85,114,0.08); }
+  .sig-brake  { color:var(--brake);   border-color:var(--brake);   background:rgba(255,204,51,0.08); }
+  .sig-accel  { color:var(--accel);   border-color:var(--accel);   background:rgba(51,212,255,0.08); }
+  .sig-neutral{ color:var(--neutral); border-color:var(--neutral); background:rgba(122,147,173,0.08); }
 
-  .summary-panel { background:var(--bg2); border:1px solid var(--border); padding:16px 20px; animation:fadeIn 0.4s 0.3s ease both; }
-  .sum-title { font-family:var(--mono); font-size:9px; color:var(--text-dim); letter-spacing:3px; margin-bottom:12px; }
-  .sum-body  { font-family:var(--mono); font-size:13px; color:var(--text); line-height:1.9; }
-  .sum-body .hl   { color:var(--btc); }
-  .sum-body .ut   { color:var(--up); }
-  .sum-body .dt   { color:var(--down); }
-  .sum-body .wt   { color:var(--brake); }
-  .sum-body .it   { color:var(--accel); }
+  .summary-panel {
+    background:var(--bg2); border:1px solid var(--border);
+    padding:20px 24px; animation:fadeIn 0.4s 0.3s ease both;
+  }
+  .sum-title {
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    letter-spacing:3px; margin-bottom:14px; font-weight:500;
+  }
+  .sum-body {
+    font-family:var(--mono); font-size:14px; color:var(--text);
+    line-height:1.9; font-weight:500;
+  }
+  .sum-body .hl   { color:var(--btc); font-weight:600; }
+  .sum-body .ut   { color:var(--up); font-weight:600; }
+  .sum-body .dt   { color:var(--down); font-weight:600; }
+  .sum-body .wt   { color:var(--brake); font-weight:600; }
+  .sum-body .it   { color:var(--accel); font-weight:600; }
 
-  .timestamp { text-align:right; font-family:var(--mono); font-size:9px; color:var(--text-dim); margin-top:12px; letter-spacing:1px; }
+  .timestamp {
+    text-align:right; font-family:var(--mono); font-size:11px;
+    color:var(--text-sub); margin-top:12px; letter-spacing:1.5px; font-weight:500;
+  }
 
-  .error-msg { display:none; text-align:center; padding:20px; font-family:var(--mono); font-size:11px; color:var(--down); letter-spacing:1px; border:1px solid var(--down-dim); background:rgba(255,68,102,0.05); line-height:1.9; margin-bottom:12px; }
+  .error-msg {
+    display:none; text-align:center; padding:24px;
+    font-family:var(--mono); font-size:13px; color:var(--down);
+    letter-spacing:0.5px; border:1px solid var(--down-dim);
+    background:rgba(255,85,114,0.05); line-height:1.9; margin-bottom:12px;
+    font-weight:500;
+  }
   .error-msg.active { display:block; }
+
+  /* 모바일 최적화 */
+  @media(max-width:600px){
+    .logo { font-size:38px; }
+    .logo span { font-size:26px; }
+    .tf-label { font-size:36px; }
+    .ma-val { font-size:17px; }
+    .mv { font-size:18px; }
+    .sig-badge { font-size:22px; padding:14px 16px; }
+    .sum-body { font-size:14px; line-height:2; }
+    .header { align-items:flex-start; }
+    .scan-btn { font-size:18px; padding:18px; letter-spacing:6px; }
+  }
 </style>
 </head>
 <body>
@@ -153,9 +243,9 @@
       <div class="logo">BTC <span>MA</span></div>
       <div class="subtitle">MOMENTUM · ACCELERATION · ALIGNMENT</div>
     </div>
-    <div class="price-area">
-      <div class="price-label">BTCUSDT PERP</div>
-      <div class="current-price" id="currentPrice">---</div>
+    <div class="header-right">
+      <div class="update-label">UPDATED</div>
+      <div class="update-time empty" id="headerTime">—</div>
     </div>
   </div>
 
@@ -283,18 +373,23 @@ function renderCard(lbl, d) {
   const sl = {GO:'▲ GO',STOP:'▼ STOP',BRAKE:'⚠ BRAKE',ACCEL:'◎ ACCEL',NEUTRAL:'— HOLD'}[d.sig];
   return `
     <div class="tf-card ${cc}">
-      <div class="tf-label">${lbl}</div>
+      <div class="tf-header">
+        <div class="tf-label">${lbl}</div>
+      </div>
       <div class="ma-row">
         <div class="ma-item"><div class="ma-name">5MA</div><div class="ma-val">${fp(d.ma5)}</div></div>
         <div class="ma-item"><div class="ma-name">10MA</div><div class="ma-val">${fp(d.ma10)}</div></div>
         <div class="ma-item"><div class="ma-name">20MA</div><div class="ma-val">${fp(d.ma20)}</div></div>
       </div>
-      <div class="alignment"><span class="al-label">배열</span><span class="${ac}">${d.align}</span></div>
+      <div class="alignment">
+        <span class="al-label">ALIGN</span>
+        <span class="al-val ${ac}">${d.align}</span>
+      </div>
       <div class="metrics">
         <div class="metric-row"><span class="mn">MOMENTUM</span><span class="mv ${mc(d.mom)}">${fv(d.mom)}%</span></div>
         <div class="metric-row"><span class="mn">ACCEL</span><span class="mv ${mc(d.accel)}">${fv(d.accel)}</span></div>
       </div>
-      <span class="sig-badge ${bc}">${sl}</span>
+      <div class="sig-badge ${bc}">${sl}</div>
     </div>`;
 }
 
@@ -344,18 +439,23 @@ async function fetchAll() {
     const allCloses = await Promise.all(TFS.map(tf=>fetchCandles(tf.gran,tf.limit)));
     const results   = allCloses.map(analyze);
 
-    document.getElementById('currentPrice').textContent = fp(results[0].price);
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', hour12:false});
+    const headerTimeEl = document.getElementById('headerTime');
+    headerTimeEl.textContent = timeStr;
+    headerTimeEl.classList.remove('empty');
+
     document.getElementById('tfGrid').innerHTML = TFS.map((tf,i)=>renderCard(tf.label,results[i])).join('');
     document.getElementById('sumBody').innerHTML = buildSummary(results);
-    document.getElementById('ts').textContent = 'UPDATED: '+new Date().toLocaleString('ko-KR');
+    document.getElementById('ts').textContent = 'UPDATED: '+now.toLocaleString('ko-KR');
     res.classList.add('active');
 
   } catch(e) {
     console.error('[BTC MA] fetch failed:', e);
     err.innerHTML = `
-      <div style="color:var(--down);font-size:13px;margin-bottom:8px">▼ 판단 불가 — 데이터 없음</div>
-      <div style="font-size:10px;opacity:0.7;text-align:left;white-space:pre-wrap;word-break:break-all;line-height:1.6">${e.message}</div>
-      <div style="font-size:9px;opacity:0.5;margin-top:8px">콘솔(F12)에서 상세 로그 확인 가능 · 네트워크 문제일 경우 잠시 후 재시도</div>
+      <div style="color:var(--down);font-size:15px;margin-bottom:10px;font-weight:600">▼ 판단 불가 — 데이터 없음</div>
+      <div style="font-size:12px;opacity:0.75;text-align:left;white-space:pre-wrap;word-break:break-all;line-height:1.7">${e.message}</div>
+      <div style="font-size:11px;opacity:0.55;margin-top:10px">콘솔(F12)에서 상세 로그 확인 가능 · 네트워크 문제일 경우 잠시 후 재시도</div>
     `;
     err.classList.add('active');
   } finally {
