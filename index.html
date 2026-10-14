@@ -131,10 +131,18 @@
   .hint {
     position:absolute; left:50%; bottom:14px; transform:translateX(-50%); z-index:4;
     background:rgba(16,22,31,0.95); border:1px solid var(--btc); color:var(--text);
-    padding:8px 14px; border-radius:20px; font-size:13px; font-weight:600;
-    display:none; align-items:center; gap:10px; white-space:nowrap;
+    padding:8px 14px; border-radius:16px; font-size:13px; font-weight:600;
+    display:none; flex-direction:column; align-items:center; gap:8px; white-space:nowrap;
   }
   .hint.show { display:flex; }
+  .hint { max-width:calc(100% - 16px); }
+  .hint-row { display:flex; align-items:center; gap:10px; }
+  #hintText { white-space:normal; text-align:center; }
+  .hint-row button { flex:none; }
+  .swatches { display:flex; gap:6px; }
+  .swatches[hidden] { display:none; }
+  .sw { width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,0.15); flex:none; }
+  .sw.on { border-color:var(--text); box-shadow:0 0 0 2px var(--bg2), 0 0 0 4px var(--text); }
   .hint.erase { border-color:var(--down); }
   .hint button { color:var(--text-dim); font-size:12px; border:1px solid var(--border2); border-radius:12px; padding:2px 9px; }
   .hint button.del { color:var(--down); border-color:var(--down-dim); }
@@ -245,6 +253,8 @@
     .hint { bottom:10px; }
   }
   @media (max-width: 370px) {
+    .sw { width:22px; height:22px; }
+    .swatches { gap:5px; }
     .top { gap:4px; }
     .logo { display:none; }
     .live { font-size:12px; }
@@ -296,7 +306,10 @@
   <main class="chart-wrap">
     <div id="chart"></div>
     <div class="legend" id="legend"></div>
-    <div class="hint" id="hint"><span id="hintText"></span><button id="hintDelete" class="del" hidden>삭제</button><button id="hintCancel">취소</button></div>
+    <div class="hint" id="hint">
+      <div class="hint-row"><span id="hintText"></span><button id="hintDelete" class="del" hidden>삭제</button><button id="hintCancel">취소</button></div>
+      <div class="swatches" id="swatches" hidden></div>
+    </div>
     <div class="toast" id="toast"></div>
   </main>
 </div>
@@ -359,6 +372,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 고칠 때마다 v를 올린다: 배포 직후 브라우저가 옛 app.js를 쓰지 않도록 -->
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

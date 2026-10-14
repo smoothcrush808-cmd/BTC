@@ -537,8 +537,28 @@ function updateLegend() {
     (S.busy ? '<span class="busy">불러오는 중…</span>' : '');
 }
 
+// ───────────────────────── 색 (트레이딩뷰 기본 10색에서 남보라를 빼고 흰색을 넣음)
+const PALETTE = ['#ffffff', '#f23645', '#ff9800', '#ffeb3b', '#4caf50', '#089981', '#00bcd4', '#2962ff', '#9c27b0', '#e91e63'];
+const DEFAULT_COLOR = { hline: C.hline, ray: C.ray, dot: C.dot, box: C.box };
+const isHex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+const colorOf = d => (isHex(d.c) ? d.c : DEFAULT_COLOR[d.type]);
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+// 밝은 바탕(흰·노랑 등)엔 어두운 글씨
+function labelTextColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? C.bg : '#ffffff';
+}
+// 도구별 마지막에 쓴 색
+const toolColors = { ...DEFAULT_COLOR };
+for (const [k, v] of Object.entries(store.get(PREF_KEY, {}).colors || {})) if (k in toolColors && isHex(v)) toolColors[k] = v;
+function saveToolColors() { store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), colors: toolColors }); }
+
 // ───────────────────────── 그림 (시각·가격으로 저장 → 확대·스크롤·간격 변경에도 따라온다)
-// 저장 형식: { id, type: 'hline'|'ray'|'dot'|'box', p, t?, p2?, t2? }  (t = 실제 UTC ms)
+// 저장 형식: { id, type: 'hline'|'ray'|'dot'|'box', p, t?, p2?, t2?, c? }  (t = 실제 UTC ms, c = 색 #rrggbb)
 const drawings = (() => {
   let list = (store.get(STORE_KEY, { drawings: [] }).drawings || []).filter(valid);
   let pending = null;   // 박스 첫 꼭짓점 {t, p}
@@ -570,12 +590,11 @@ const drawings = (() => {
   // 가격축 라벨: 수평선·레이
   function rebuildAxis() {
     axisViews = list.filter(d => d.type === 'hline' || d.type === 'ray').map(d => {
-      const color = d.type === 'hline' ? C.hline : C.ray;
       return {
         coordinate: () => series.priceToCoordinate(d.p) ?? -100,
         text: () => fmtPrice(d.p),
-        textColor: () => C.bg,
-        backColor: () => (hot === d.id ? C.erase : color),
+        textColor: () => (hot === d.id ? '#ffffff' : labelTextColor(colorOf(d))),
+        backColor: () => (hot === d.id ? C.erase : colorOf(d)),
       };
     });
   }
@@ -597,8 +616,9 @@ const drawings = (() => {
     const sd = sel && list.find(d => d.id === sel);
     if (sd) drawHandles(ctx, sd, w);
     if (pending) {
-      const a = { type: 'dot', t: pending.t, p: pending.p };
-      if (preview) drawOne(ctx, { type: 'box', t: pending.t, p: pending.p, t2: preview.t, p2: preview.p }, w, h, false, true);
+      const c = toolColors.box;
+      const a = { type: 'dot', t: pending.t, p: pending.p, c };
+      if (preview) drawOne(ctx, { type: 'box', t: pending.t, p: pending.p, t2: preview.t, p2: preview.p, c }, w, h, false, true);
       drawOne(ctx, a, w, h, false);
     }
   }
@@ -608,15 +628,16 @@ const drawings = (() => {
     if (y == null) return;
     ctx.save();
     ctx.lineWidth = isHot ? 2.5 : 1.5;
+    const color = colorOf(d);
     switch (d.type) {
       case 'hline': {
-        ctx.strokeStyle = isHot ? C.erase : C.hline;
+        ctx.strokeStyle = isHot ? C.erase : color;
         ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(w, Math.round(y) + 0.5); ctx.stroke();
         break;
       }
       case 'ray': {
         const x = cx(d); if (x == null) break;
-        const col = isHot ? C.erase : C.ray;
+        const col = isHot ? C.erase : color;
         ctx.strokeStyle = col; ctx.fillStyle = col;
         const yy = Math.round(y) + 0.5;
         ctx.beginPath(); ctx.moveTo(Math.max(x, -10), yy); ctx.lineTo(w, yy); ctx.stroke();
@@ -625,7 +646,7 @@ const drawings = (() => {
       }
       case 'dot': {
         const x = cx(d); if (x == null) break;
-        ctx.fillStyle = isHot ? C.erase : C.dot;
+        ctx.fillStyle = isHot ? C.erase : color;
         ctx.strokeStyle = C.bg; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(x, y, isHot ? 6 : 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         break;
@@ -634,9 +655,9 @@ const drawings = (() => {
         const x1 = cx(d), x2 = timeToX(msToChart(d.t2)), y2 = cy(d.p2);
         if (x1 == null || x2 == null || y2 == null) break;
         const l = Math.min(x1, x2), r = Math.max(x1, x2), t = Math.min(y, y2), b = Math.max(y, y2);
-        ctx.fillStyle = isHot ? 'rgba(255,85,114,0.15)' : C.boxFill;
+        ctx.fillStyle = isHot ? 'rgba(255,85,114,0.15)' : hexA(color, 0.14);
         ctx.fillRect(l, t, r - l, b - t);
-        ctx.strokeStyle = isHot ? C.erase : C.box;
+        ctx.strokeStyle = isHot ? C.erase : color;
         if (ghost) ctx.setLineDash([4, 3]);
         ctx.strokeRect(Math.round(l) + 0.5, Math.round(t) + 0.5, Math.round(r - l), Math.round(b - t));
         break;
@@ -742,6 +763,7 @@ const drawings = (() => {
         const clean = { id: d.id, type: d.type, p: d.p };
         if (d.t != null) clean.t = d.t;
         if (d.type === 'box') { clean.p2 = d.p2; clean.t2 = d.t2; }
+        if (isHex(d.c)) clean.c = d.c;
         list.push(clean); have.add(d.id); added++;
       }
       persist();
@@ -764,7 +786,7 @@ const HINTS = {
   box: '박스 — 첫 꼭짓점을 탭하세요',
   box2: '박스 — 반대쪽 꼭짓점을 탭하세요',
   erase: '지우기 — 지울 그림을 탭하세요',
-  edit: '수정 — 끌어서 옮기기 · 동그라미로 크기 조절',
+  edit: '끌어서 이동 · ○로 크기 조절',
 };
 
 function setTool(t) {
@@ -781,6 +803,32 @@ function showHint(text) {
   ui.hintText.textContent = text || '';
   $('hintDelete').hidden = !drawings.getSel();
   $('hintCancel').textContent = drawings.getSel() ? '완료' : '취소';
+  renderSwatches();
+}
+
+// 색 고르기: 도구를 고른 상태면 새로 그릴 색, 그림을 선택한 상태면 그 그림의 색
+function renderSwatches() {
+  const box = $('swatches');
+  const sd = drawings.getSel() && drawings.get(drawings.getSel());
+  const type = sd ? sd.type : (tool && tool !== 'erase' ? tool : null);
+  box.hidden = !type;
+  if (!type) return;
+  const cur = sd ? colorOf(sd) : toolColors[type];
+  box.innerHTML = '';
+  for (const c of PALETTE) {
+    const b = document.createElement('button');
+    b.className = 'sw' + (c.toLowerCase() === cur.toLowerCase() ? ' on' : '');
+    b.style.background = c;
+    b.title = c;
+    b.addEventListener('click', () => {
+      toolColors[type] = c; saveToolColors();
+      const id = drawings.getSel();
+      if (id) { drawings.patch(id, { c }); drawings.save(); }
+      drawings.refresh();
+      renderSwatches();
+    });
+    box.appendChild(b);
+  }
 }
 
 // 그림 선택(수정 모드): 선택 중엔 차트 끌기·확대를 잠가서 손가락이 그림만 움직이게 한다
@@ -891,14 +939,15 @@ function onTap(x, y) {
   }
   const pt = pointAt(x, y);
   if (!pt) return;
-  if (tool === 'hline') drawings.add({ type: 'hline', p: pt.p });
-  else if (tool === 'dot') drawings.add({ type: 'dot', t: pt.t, p: pt.p });
-  else if (tool === 'ray') drawings.add({ type: 'ray', t: pt.t, p: pt.p });
+  const c = toolColors[tool];
+  if (tool === 'hline') drawings.add({ type: 'hline', p: pt.p, c });
+  else if (tool === 'dot') drawings.add({ type: 'dot', t: pt.t, p: pt.p, c });
+  else if (tool === 'ray') drawings.add({ type: 'ray', t: pt.t, p: pt.p, c });
   else if (tool === 'box') {
     const first = drawings.getPending();
     if (!first) { drawings.setPending(pt); showHint(HINTS.box2); return; }
     if (first.t === pt.t && first.p === pt.p) return;
-    drawings.add({ type: 'box', t: first.t, p: first.p, t2: pt.t, p2: pt.p });
+    drawings.add({ type: 'box', t: first.t, p: first.p, t2: pt.t, p2: pt.p, c });
   }
   setTool(null);
 }
