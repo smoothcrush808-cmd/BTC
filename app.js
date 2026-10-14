@@ -36,13 +36,13 @@ const wide = (() => {
   const origRect = Element.prototype.getBoundingClientRect;
   Element.prototype.getBoundingClientRect = function () {
     const r = origRect.call(this);
-    if (!active() || !root.contains(this)) return r;
+    if (!active() || !root || !root.contains(this)) return r;
     return new DOMRect(r.top, W() - r.right, r.height, r.width);
   };
 
   function apply(want) {
-    // 폰을 실제로 가로로 돌렸으면 이중 회전이 되므로 끈다
-    on = !!want && window.innerWidth < window.innerHeight && window.innerWidth <= 720;
+    // 폰을 실제로 가로로 돌렸으면 이중 회전이 되므로 끈다 (옛 index.html이면 #root가 없어 못 켬)
+    on = !!want && !!root && window.innerWidth < window.innerHeight && window.innerWidth <= 720;
     html.style.setProperty('--vw', window.innerWidth + 'px');
     html.style.setProperty('--vh', window.innerHeight + 'px');
     html.classList.toggle('wide', on);
@@ -932,7 +932,7 @@ document.addEventListener('keydown', e => {
 
 // 와이드 버튼
 let wantWide = false;
-$('wideBtn').addEventListener('click', () => {
+$('wideBtn')?.addEventListener('click', () => {
   wantWide = !wantWide;
   store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), wide: wantWide });
   wide.apply(wantWide);
