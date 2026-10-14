@@ -544,10 +544,6 @@ const PALETTE = ['#ffffff', '#f23645', '#ff9800', '#ffeb3b', '#4caf50', '#089981
 const DEFAULT_COLOR = { hline: C.hline, ray: C.ray, dot: C.dot, box: C.box };
 const isHex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 const colorOf = d => (isHex(d.c) ? d.c : DEFAULT_COLOR[d.type]);
-function hexA(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
-}
 // 밝은 바탕(흰·노랑 등)엔 어두운 글씨
 function labelTextColor(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -657,8 +653,6 @@ const drawings = (() => {
         const x1 = cx(d), x2 = timeToX(msToChart(d.t2)), y2 = cy(d.p2);
         if (x1 == null || x2 == null || y2 == null) break;
         const l = Math.min(x1, x2), r = Math.max(x1, x2), t = Math.min(y, y2), b = Math.max(y, y2);
-        ctx.fillStyle = isHot ? 'rgba(255,85,114,0.15)' : hexA(color, 0.14);
-        ctx.fillRect(l, t, r - l, b - t);
         ctx.strokeStyle = isHot ? C.erase : color;
         if (ghost) ctx.setLineDash([4, 3]);
         ctx.strokeRect(Math.round(l) + 0.5, Math.round(t) + 0.5, Math.round(r - l), Math.round(b - t));
