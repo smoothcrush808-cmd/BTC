@@ -3,6 +3,54 @@
 'use strict';
 
 const LWC = window.LightweightCharts;
+
+// ───────────────────────── 와이드 (화면 90° 회전)
+// iPhone 사파리는 화면 방향 고정 API가 없어서 CSS로 돌린다. 돌린 화면에선 터치 좌표가 어긋나므로
+// 와이드일 때만 clientX/Y·pageX/Y·getBoundingClientRect를 '돌린 화면 기준'으로 바꿔 돌려준다.
+// 화면 (sx, sy) ↔ 돌린 화면 (ux, uy):  ux = sy,  uy = W − sx   (W = 실제 화면 폭)
+const wide = (() => {
+  const html = document.documentElement;
+  const root = document.getElementById('root');
+  let on = false;
+  const W = () => window.innerWidth;
+  const active = () => on;
+
+  for (const proto of [window.MouseEvent && MouseEvent.prototype, window.Touch && Touch.prototype]) {
+    if (!proto) continue;
+    const d = name => {
+      for (let o = proto; o; o = Object.getPrototypeOf(o)) {
+        const desc = Object.getOwnPropertyDescriptor(o, name);
+        if (desc && desc.get) return desc.get;
+      }
+      return null;
+    };
+    const g = { cx: d('clientX'), cy: d('clientY'), px: d('pageX'), py: d('pageY') };
+    if (!g.cx || !g.cy || !g.px || !g.py) continue;
+    Object.defineProperties(proto, {
+      clientX: { configurable: true, get() { return active() ? g.cy.call(this) : g.cx.call(this); } },
+      clientY: { configurable: true, get() { return active() ? W() - g.cx.call(this) : g.cy.call(this); } },
+      pageX: { configurable: true, get() { return active() ? g.py.call(this) : g.px.call(this); } },
+      pageY: { configurable: true, get() { return active() ? W() - g.px.call(this) : g.py.call(this); } },
+    });
+  }
+  const origRect = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function () {
+    const r = origRect.call(this);
+    if (!active() || !root.contains(this)) return r;
+    return new DOMRect(r.top, W() - r.right, r.height, r.width);
+  };
+
+  function apply(want) {
+    // 폰을 실제로 가로로 돌렸으면 이중 회전이 되므로 끈다
+    on = !!want && window.innerWidth < window.innerHeight && window.innerWidth <= 720;
+    html.style.setProperty('--vw', window.innerWidth + 'px');
+    html.style.setProperty('--vh', window.innerHeight + 'px');
+    html.classList.toggle('wide', on);
+    const b = document.getElementById('wideBtn');
+    if (b) b.classList.toggle('on', !!want);
+  }
+  return { apply, isOn: () => on };
+})();
 const SYMBOL = 'BTCUSDT';
 const KST = 9 * 3600;            // 차트 시각은 KST로 밀어서 넣는다 (눈금이 KST 자정에 맞도록)
 const PAGE = 1000;               // 바이낸스 klines 최대 개수
@@ -368,7 +416,7 @@ function switchInterval(iv) {
   S.gen++;
   S.loadingLeft = S.loadingRight = false;
   S.iv = iv;
-  store.set(PREF_KEY, { iv });
+  store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), iv });
   document.querySelectorAll('#ivSeg button').forEach(b => b.classList.toggle('on', b.dataset.iv === iv));
   connectWs();
 
@@ -882,8 +930,19 @@ document.addEventListener('keydown', e => {
   else if (k === '3') switchInterval('1h');
 });
 
+// 와이드 버튼
+let wantWide = false;
+$('wideBtn').addEventListener('click', () => {
+  wantWide = !wantWide;
+  store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), wide: wantWide });
+  wide.apply(wantWide);
+});
+window.addEventListener('resize', () => wide.apply(wantWide));
+
 // ───────────────────────── 시작
 const prefs = store.get(PREF_KEY, {});
+wantWide = !!prefs.wide;
+wide.apply(wantWide);
 S.iv = IVS[prefs.iv] ? prefs.iv : '5m';
 document.querySelectorAll('#ivSeg button').forEach(b => b.classList.toggle('on', b.dataset.iv === S.iv));
 updateLegend();
@@ -891,5 +950,5 @@ loadLatest();
 connectWs();
 
 // 디버그·테스트용
-window.__psych = { S, chart, series, drawings, jumpTo, switchInterval };
+window.__psych = { S, chart, series, drawings, jumpTo, switchInterval, wide };
 })();

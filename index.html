@@ -157,6 +157,17 @@
   .quick { display:flex; gap:6px; flex-wrap:wrap; }
   .quick .btn { font-size:12px; padding:4px 9px; }
 
+  #wideBtn { display:none; }
+  #wideBtn.on { border-color:var(--btc); color:var(--btc); }
+
+  /* 와이드: 세로로 든 폰에서 화면을 90° 돌려 가로로 본다 (폰을 왼쪽으로 눕혀서 보기) */
+  html.wide #root {
+    position:fixed; top:0; left:0;
+    transform-origin:0 0; transform:translateX(var(--vw)) rotate(90deg);
+    width:var(--vh); height:var(--vw); overflow:hidden;
+  }
+  html.wide .app { height:100%; }
+
   /* 모바일: 도구 막대를 아래로 */
   @media (max-width: 720px) {
     .app {
@@ -164,14 +175,15 @@
       grid-template-rows: auto 1fr auto;
       grid-template-areas: "top" "chart" "tools";
     }
-    .top { padding:6px 8px; gap:6px; flex-wrap:nowrap; }
+    .top { padding:6px 8px; gap:5px; flex-wrap:nowrap; }
+    .app { grid-template-columns: minmax(0, 1fr); }
     .venue, .logo span { display:none; }
     .logo { font-size:15px; letter-spacing:0; }
     .live { font-size:13px; gap:5px; }
     .seg button { padding:6px 7px; font-size:12px; }
     .seg .l, .top .btn .lbl { display:none; }
     .seg .s { display:inline; }
-    .top .btn { padding:6px 7px; }
+    .top .btn { padding:6px 6px; }
     .top .btn svg { width:17px; height:17px; }
     .hint { bottom:40px; }
     .tools {
@@ -183,6 +195,23 @@
     .tool-sep { display:none; }
     .legend { font-size:11px; gap:2px 9px; }
   }
+  @media (max-width: 720px) {
+    #wideBtn { display:inline-flex; }
+    /* 와이드일 땐 화면이 넓어지니 PC처럼 도구 막대를 왼쪽에 */
+    html.wide .app {
+      grid-template-columns: 54px minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      grid-template-areas: "top top" "tools chart";
+    }
+    html.wide .tools {
+      flex-direction:column; justify-content:flex-start; gap:2px;
+      border-top:0; border-right:1px solid var(--border); padding:4px;
+    }
+    html.wide .tool { flex:none; padding:5px 0; font-size:10px; }
+    html.wide .tool svg { width:20px; height:20px; }
+    html.wide .logo { display:block; }
+    html.wide .hint { bottom:14px; }
+  }
   @media (max-width: 370px) {
     .top { gap:4px; }
     .logo { display:none; }
@@ -193,6 +222,7 @@
 </style>
 </head>
 <body>
+<div id="root">
 <div class="app">
 
   <header class="top">
@@ -211,6 +241,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg><span class="lbl">날짜</span></button>
     <button class="btn" id="latestBtn" title="최신으로 (L)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 6 12 12 6 18"/><polyline points="12 6 18 12 12 18"/></svg><span class="lbl">최신</span></button>
+    <button class="btn" id="wideBtn" title="와이드 (화면 가로로 돌리기)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="2"/><path d="M7 3h6"/><polyline points="11 1 13 3 11 5"/></svg><span class="lbl">와이드</span></button>
     <button class="btn" id="dataBtn" title="그림 내보내기 / 가져오기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 17v3h16v-3"/></svg><span class="lbl">저장</span></button>
   </header>
@@ -291,6 +323,7 @@
     </div>
   </div>
 </div>
+</div><!-- #root -->
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="app.js"></script>
