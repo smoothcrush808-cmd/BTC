@@ -117,6 +117,8 @@ function tickFmt(t, type) {
   }
 }
 const fmtPrice = p => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// 가격축은 소수점 없이 (축 폭을 줄인다)
+const fmtAxis = p => Math.round(p).toLocaleString('en-US');
 const msToChart = ms => Math.floor(ms / 1000) + KST;
 const chartToMs = t => (t - KST) * 1000;
 
@@ -200,7 +202,7 @@ const chart = LWC.createChart($('chart'), {
     borderColor: C.border, timeVisible: true, secondsVisible: false,
     rightOffset: 8, barSpacing: window.innerWidth < 720 ? 4.5 : 7, tickMarkFormatter: tickFmt,
   },
-  localization: { locale: 'ko-KR', timeFormatter: t => fmtChartTime(t), priceFormatter: fmtPrice },
+  localization: { locale: 'ko-KR', timeFormatter: t => fmtChartTime(t), priceFormatter: fmtAxis },
   crosshair: {
     mode: LWC.CrosshairMode.Normal,
     vertLine: { color: 'rgba(138,154,176,0.5)', labelBackgroundColor: '#243447' },
@@ -592,7 +594,7 @@ const drawings = (() => {
     axisViews = list.filter(d => d.type === 'hline' || d.type === 'ray').map(d => {
       return {
         coordinate: () => series.priceToCoordinate(d.p) ?? -100,
-        text: () => fmtPrice(d.p),
+        text: () => fmtAxis(d.p),
         textColor: () => (hot === d.id ? '#ffffff' : labelTextColor(colorOf(d))),
         backColor: () => (hot === d.id ? C.erase : colorOf(d)),
       };
