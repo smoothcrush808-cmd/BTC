@@ -116,7 +116,7 @@
 
   /* 차트 */
   .chart-wrap { grid-area:chart; position:relative; min-width:0; min-height:0; }
-  #chart { position:absolute; inset:0; }
+  #chart { position:absolute; inset:0; touch-action:none; }
 
   .legend {
     position:absolute; top:8px; left:10px; z-index:3; pointer-events:none;
@@ -137,6 +137,8 @@
   .hint.show { display:flex; }
   .hint.erase { border-color:var(--down); }
   .hint button { color:var(--text-dim); font-size:12px; border:1px solid var(--border2); border-radius:12px; padding:2px 9px; }
+  .hint button.del { color:var(--down); border-color:var(--down-dim); }
+  .hint button[hidden] { display:none; }
 
   .toast {
     position:absolute; top:40px; left:50%; transform:translateX(-50%); z-index:6;
@@ -294,7 +296,7 @@
   <main class="chart-wrap">
     <div id="chart"></div>
     <div class="legend" id="legend"></div>
-    <div class="hint" id="hint"><span id="hintText"></span><button id="hintCancel">취소</button></div>
+    <div class="hint" id="hint"><span id="hintText"></span><button id="hintDelete" class="del" hidden>삭제</button><button id="hintCancel">취소</button></div>
     <div class="toast" id="toast"></div>
   </main>
 </div>
@@ -357,6 +359,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 고칠 때마다 v를 올린다: 배포 직후 브라우저가 옛 app.js를 쓰지 않도록 -->
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
