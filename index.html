@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e14">
+<!-- 홈 화면에 추가하면 사파리 주소창 없이 전체 화면 앱으로 열린다 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="심리차트">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>BTC 심리차트</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,7 +38,10 @@
     --mono: 'IBM Plex Mono', 'Menlo', 'Consolas', monospace;
     --display: 'Inter', 'Pretendard Variable', sans-serif;
     --body: 'Pretendard Variable', 'Inter', -apple-system, sans-serif;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
     --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { height:100%; overflow:hidden; }
@@ -48,6 +59,8 @@
     grid-template-columns: 60px 1fr;
     grid-template-rows: auto 1fr;
     grid-template-areas: "top top" "tools chart";
+    /* 노치·상태바·홈 막대 자리 비우기 (홈 화면 앱일 때 필요) */
+    padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
   }
 
   /* 상단 바 */
@@ -166,11 +179,12 @@
     transform-origin:0 0; transform:translateX(var(--vw)) rotate(90deg);
     width:var(--vh); height:var(--vw); overflow:hidden;
   }
-  html.wide .app { height:100%; }
+  html.wide .app { height:100%; padding: 0 var(--safe-b) 0 var(--safe-t); }
 
   /* 모바일: 도구 막대를 아래로 */
   @media (max-width: 720px) {
     .app {
+      padding-bottom:0;
       grid-template-columns: 1fr;
       grid-template-rows: auto 1fr auto;
       grid-template-areas: "top" "chart" "tools";
@@ -199,7 +213,7 @@
     #wideBtn { display:inline-flex; }
     /* 와이드일 땐 화면이 넓어지니 PC처럼 도구 막대를 왼쪽에 */
     html.wide .app {
-      grid-template-columns: 54px minmax(0, 1fr);
+      grid-template-columns: 46px minmax(0, 1fr);
       grid-template-rows: auto 1fr;
       grid-template-areas: "top top" "tools chart";
     }
@@ -207,10 +221,26 @@
       flex-direction:column; justify-content:flex-start; gap:2px;
       border-top:0; border-right:1px solid var(--border); padding:4px;
     }
-    html.wide .tool { flex:none; padding:5px 0; font-size:10px; }
+    html.wide .tool { flex:none; padding:7px 0; font-size:0; gap:0; }
     html.wide .tool svg { width:20px; height:20px; }
     html.wide .logo { display:block; }
     html.wide .hint { bottom:14px; }
+  }
+  /* 가로로 돌린 폰처럼 높이가 낮을 때: 위·왼쪽 막대를 줄여 차트를 넓게 */
+  @media (max-height: 500px) and (min-width: 721px) {
+    .app { grid-template-columns: 46px minmax(0, 1fr); }
+    .top { padding:4px 10px; gap:8px; }
+    .venue { display:none; }
+    .logo { font-size:15px; }
+    .live { font-size:14px; }
+    .seg button { padding:4px 9px; font-size:12px; }
+    .btn { padding:4px 9px; font-size:12px; }
+    .tools { padding:4px; gap:2px; }
+    .tool { padding:7px 0; font-size:0; gap:0; }
+    .tool svg { width:20px; height:20px; }
+    .tool-sep { margin:2px 4px; }
+    .legend { font-size:11px; top:4px; }
+    .hint { bottom:10px; }
   }
   @media (max-width: 370px) {
     .top { gap:4px; }
@@ -327,6 +357,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 고칠 때마다 v를 올린다: 배포 직후 브라우저가 옛 app.js를 쓰지 않도록 -->
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
