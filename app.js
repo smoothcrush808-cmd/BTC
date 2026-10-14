@@ -39,6 +39,13 @@ const wide = (() => {
     if (!active() || !root || !root.contains(this)) return r;
     return new DOMRect(r.top, W() - r.right, r.height, r.width);
   };
+  // 사파리는 캔버스 해상도를 getClientRects로 정한다 → 돌린 화면에선 폭·높이가 뒤바뀌어 축 글씨가 뭉개짐
+  const origRects = Element.prototype.getClientRects;
+  Element.prototype.getClientRects = function () {
+    const list = origRects.call(this);
+    if (!active() || !root || !root.contains(this)) return list;
+    return Array.from(list, r => new DOMRect(r.top, W() - r.right, r.height, r.width));
+  };
 
   function apply(want) {
     // 폰을 실제로 가로로 돌렸으면 이중 회전이 되므로 끈다 (옛 index.html이면 #root가 없어 못 켬)
@@ -537,6 +544,7 @@ const drawings = (() => {
   let pending = null;   // 박스 첫 꼭짓점 {t, p}
   let preview = null;   // 박스 미리보기 둘째 꼭짓점 {t, p}
   let hot = null;       // 지우기 후보 id
+  let sel = null;       // 수정 중인 그림 id
   let requestUpdate = () => {};
   let axisViews = [];
 
@@ -586,6 +594,8 @@ const drawings = (() => {
       }
     }
     for (const d of list) drawOne(ctx, d, w, h, hot === d.id);
+    const sd = sel && list.find(d => d.id === sel);
+    if (sd) drawHandles(ctx, sd, w);
     if (pending) {
       const a = { type: 'dot', t: pending.t, p: pending.p };
       if (preview) drawOne(ctx, { type: 'box', t: pending.t, p: pending.p, t2: preview.t, p2: preview.p }, w, h, false, true);
@@ -635,10 +645,32 @@ const drawings = (() => {
     ctx.restore();
   }
 
+  // 수정 손잡이: 박스는 네 꼭짓점, 레이·점은 시작점, 수평선은 화면 가운데 한 점
+  function handlesOf(d, w) {
+    const y = cy(d.p); if (y == null) return [];
+    if (d.type === 'hline') return [{ x: w / 2, y, tk: null, pk: 'p' }];
+    const x = cx(d); if (x == null) return [];
+    if (d.type !== 'box') return [{ x, y, tk: 't', pk: 'p' }];
+    const x2 = timeToX(msToChart(d.t2)), y2 = cy(d.p2);
+    if (x2 == null || y2 == null) return [];
+    return [
+      { x, y, tk: 't', pk: 'p' }, { x: x2, y, tk: 't2', pk: 'p' },
+      { x, y: y2, tk: 't', pk: 'p2' }, { x: x2, y: y2, tk: 't2', pk: 'p2' },
+    ];
+  }
+  function drawHandles(ctx, d, w) {
+    ctx.save();
+    ctx.fillStyle = C.bg; ctx.strokeStyle = C.btc; ctx.lineWidth = 2;
+    for (const hd of handlesOf(d, w)) {
+      ctx.beginPath(); ctx.arc(hd.x, hd.y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // 지우기용: 탭 위치에서 가장 가까운 그림 (px 거리)
-  function hitTest(px, py, tol = 16) {
+  function hitTest(px, py, tol = 16, only = null) {
     let best = null, bestD = tol;
-    for (const d of list) {
+    for (const d of only ? list.filter(x => x.id === only) : list) {
       const y = cy(d.p); if (y == null) continue;
       let dist = Infinity;
       if (d.type === 'hline') dist = Math.abs(py - y);
@@ -687,8 +719,20 @@ const drawings = (() => {
     all: () => list.slice(),
     count: () => list.length,
     add(d) { list.push({ id: newId(), ...d }); persist(); },
-    remove(id) { list = list.filter(d => d.id !== id); hot = null; persist(); },
-    clear() { list = []; persist(); },
+    remove(id) { list = list.filter(d => d.id !== id); hot = null; if (sel === id) sel = null; persist(); },
+    get: id => list.find(d => d.id === id) || null,
+    // 끄는 동안은 그리기만 다시 하고, 손을 뗄 때 save()로 저장
+    patch(id, fields) { const d = list.find(x => x.id === id); if (d) { Object.assign(d, fields); requestUpdate(); } },
+    save: () => persist(),
+    setSel(id) { sel = id; requestUpdate(); },
+    getSel: () => sel,
+    handleAt(px, py, w, tol) {
+      const d = sel && list.find(x => x.id === sel); if (!d) return null;
+      let best = null, bestD = tol;
+      for (const hd of handlesOf(d, w)) { const dist = Math.hypot(px - hd.x, py - hd.y); if (dist < bestD) { bestD = dist; best = hd; } }
+      return best;
+    },
+    clear() { list = []; sel = null; persist(); },
     importMany(arr) {
       const have = new Set(list.map(d => d.id));
       let added = 0, bad = 0;
@@ -720,9 +764,11 @@ const HINTS = {
   box: '박스 — 첫 꼭짓점을 탭하세요',
   box2: '박스 — 반대쪽 꼭짓점을 탭하세요',
   erase: '지우기 — 지울 그림을 탭하세요',
+  edit: '수정 — 끌어서 옮기기 · 동그라미로 크기 조절',
 };
 
 function setTool(t) {
+  if (t) select(null);
   tool = t;
   drawings.setPending(null);
   drawings.setHot(null);
@@ -733,12 +779,24 @@ function showHint(text) {
   ui.hint.classList.toggle('show', !!text);
   ui.hint.classList.toggle('erase', tool === 'erase');
   ui.hintText.textContent = text || '';
+  $('hintDelete').hidden = !drawings.getSel();
+  $('hintCancel').textContent = drawings.getSel() ? '완료' : '취소';
+}
+
+// 그림 선택(수정 모드): 선택 중엔 차트 끌기·확대를 잠가서 손가락이 그림만 움직이게 한다
+function select(id) {
+  if (id === drawings.getSel()) return;
+  drawings.setSel(id);
+  chart.applyOptions({ handleScroll: !id, handleScale: !id });
+  if (id) { tool = null; document.querySelectorAll('#tools .tool').forEach(b => b.classList.remove('on')); }
+  showHint(id ? HINTS.edit : null);
 }
 
 document.querySelectorAll('#tools .tool').forEach(b => {
   b.addEventListener('click', () => setTool(tool === b.dataset.tool ? null : b.dataset.tool));
 });
-$('hintCancel').addEventListener('click', () => setTool(null));
+$('hintCancel').addEventListener('click', () => { select(null); setTool(null); });
+$('hintDelete').addEventListener('click', () => { const id = drawings.getSel(); select(null); if (id) drawings.remove(id); });
 
 function pointAt(x, y) {
   if (!S.bars.length) return null;
@@ -753,11 +811,53 @@ function pointAt(x, y) {
 const chartEl = $('chart');
 const taps = new Map(); // pointerId → {x, y, t}
 let multiTouch = false;
+let drag = null; // {id, pointerId, handle|null, start:{l,p}, orig}
+function localXY(e) {
+  const r = chartEl.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width - chart.priceScale('right').width() };
+}
 chartEl.addEventListener('pointerdown', e => {
   taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
-  if (taps.size > 1) multiTouch = true;
+  if (taps.size > 1) { multiTouch = true; drag = null; return; }
+  const sid = drawings.getSel();
+  if (!sid || tool) return;
+  const { x, y, w } = localXY(e);
+  const tol = e.pointerType === 'mouse' ? 10 : 22;
+  const handle = drawings.handleAt(x, y, w, tol);
+  if (!handle && !drawings.hitTest(x, y, tol, sid)) return;
+  const l = ts.coordinateToLogical(x), p = series.coordinateToPrice(y);
+  if (l == null || p == null) return;
+  drag = { id: sid, pointerId: e.pointerId, handle, start: { l, p }, orig: { ...drawings.get(sid) }, moved: false };
+  try { chartEl.setPointerCapture(e.pointerId); } catch {}
+}, true);
+chartEl.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const { x, y } = localXY(e);
+  const l = ts.coordinateToLogical(x), p = series.coordinateToPrice(y);
+  if (l == null || p == null) return;
+  drag.moved = true;
+  const o = drag.orig, round = v => Math.round(v * 100) / 100;
+  if (drag.handle) {
+    // 손잡이: 그 꼭짓점만 손가락 위치로
+    const f = { [drag.handle.pk]: round(p) };
+    if (drag.handle.tk) f[drag.handle.tk] = chartToMs(logicalToTime(l));
+    drawings.patch(drag.id, f);
+  } else {
+    // 몸통: 가격·봉 개수만큼 통째로 이동
+    const dp = p - drag.start.p, dl = Math.round(l - drag.start.l);
+    const shiftT = t => chartToMs(logicalToTime(timeToLogical(msToChart(t)) + dl));
+    const f = { p: round(o.p + dp) };
+    if (o.t != null) f.t = shiftT(o.t);
+    if (o.type === 'box') { f.p2 = round(o.p2 + dp); f.t2 = shiftT(o.t2); }
+    drawings.patch(drag.id, f);
+  }
 }, true);
 const endTap = e => {
+  if (drag && e.pointerId === drag.pointerId) {
+    const moved = drag.moved;
+    drag = null;
+    if (moved) { drawings.save(); taps.delete(e.pointerId); return; }
+  }
   const d = taps.get(e.pointerId);
   taps.delete(e.pointerId);
   if (!d) return;
@@ -775,7 +875,14 @@ chartEl.addEventListener('pointerup', endTap, true);
 chartEl.addEventListener('pointercancel', endTap, true);
 
 function onTap(x, y) {
-  if (!tool) return;
+  if (!tool) {
+    // 도구 없이 탭: 그림을 고르면 수정 모드, 빈 곳이면 해제
+    const sid = drawings.getSel();
+    if (sid && drawings.hitTest(x, y, 22, sid)) return;
+    const hit = drawings.hitTest(x, y, 18);
+    select(hit ? hit.id : null);
+    return;
+  }
   if (tool === 'erase') {
     const hit = drawings.hitTest(x, y);
     if (hit) { drawings.remove(hit.id); setTool(null); }
@@ -916,9 +1023,10 @@ document.addEventListener('keydown', e => {
   if (e.target.matches('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Escape') {
     const open = document.querySelector('.backdrop.show');
-    if (open) closeModal(open); else setTool(null);
+    if (open) closeModal(open); else { select(null); setTool(null); }
     return;
   }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && drawings.getSel()) { $('hintDelete').click(); return; }
   if (document.querySelector('.backdrop.show')) return;
   const map = { h: 'hline', b: 'box', d: 'dot', r: 'ray', e: 'erase' };
   const k = e.key.toLowerCase();
