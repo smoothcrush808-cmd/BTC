@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTC MA LIGHT</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e14">
+<title>BTC 심리차트</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -12,6 +13,7 @@
   :root {
     --bg: #0a0e14;
     --bg2: #10161f;
+    --bg3: #161e2a;
     --border: #243447;
     --border2: #2d4258;
     --btc: #f7931a;
@@ -28,441 +30,269 @@
     --mono: 'IBM Plex Mono', 'Menlo', 'Consolas', monospace;
     --display: 'Inter', 'Pretendard Variable', sans-serif;
     --body: 'Pretendard Variable', 'Inter', -apple-system, sans-serif;
+    --safe-b: env(safe-area-inset-bottom, 0px);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--body);
-    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
   }
-  body::before {
-    content:'';
-    position:fixed; inset:0;
-    background-image:
-      linear-gradient(rgba(247,147,26,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(247,147,26,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events:none; z-index:0;
-  }
-  .container { position:relative; z-index:1; max-width:900px; margin:0 auto; padding:24px 16px; }
+  button { font-family:inherit; color:inherit; background:none; border:0; cursor:pointer; touch-action:manipulation; }
 
-  /* 헤더 */
-  .header {
-    display:flex; align-items:flex-end; justify-content:space-between;
-    margin-bottom:32px; padding-bottom:20px; border-bottom:1px solid var(--border);
-    gap:16px; flex-wrap:wrap;
-  }
-  .logo {
-    font-family:var(--display); font-size:44px; letter-spacing:2px;
-    color:var(--btc); line-height:1; font-weight:800;
-    text-shadow:0 0 30px rgba(247,147,26,0.25);
-  }
-  .logo span { color:var(--text-dim); font-size:30px; font-weight:600; margin-left:4px; }
-  .subtitle {
-    font-family:var(--mono); font-size:12px; color:var(--text-dim);
-    letter-spacing:2px; margin-top:6px; font-weight:500;
-  }
-  .header-right { text-align:right; }
-  .update-label {
-    font-family:var(--mono); font-size:11px; color:var(--text-sub);
-    letter-spacing:2px; font-weight:500;
-  }
-  .update-time {
-    font-family:var(--mono); font-size:15px; color:var(--text-dim);
-    font-weight:500; margin-top:4px; letter-spacing:0.5px;
-  }
-  .update-time.empty { color:var(--text-sub); }
-
-  /* 버튼 */
-  .scan-btn {
-    width:100%; padding:20px; background:transparent;
-    border:1px solid var(--btc); color:var(--btc);
-    font-family:var(--display); font-size:20px; letter-spacing:8px; font-weight:700;
-    cursor:pointer; position:relative; overflow:hidden; transition:all 0.2s; margin-bottom:24px;
-  }
-  .scan-btn::before {
-    content:''; position:absolute; inset:0; background:var(--btc);
-    transform:translateX(-100%); transition:transform 0.2s; z-index:-1;
-  }
-  .scan-btn:hover::before { transform:translateX(0); }
-  .scan-btn:hover { color:var(--bg); }
-  .scan-btn:disabled { opacity:0.4; cursor:not-allowed; color:var(--btc); }
-  .scan-btn:disabled::before { transform:translateX(-100%); }
-
-  /* 로딩 */
-  .loading { display:none; text-align:center; padding:40px; font-family:var(--mono); font-size:13px; color:var(--btc-dim); letter-spacing:3px; font-weight:500; }
-  .loading.active { display:block; }
-  .loading-dots span { animation:blink 1.2s infinite; opacity:0; }
-  .loading-dots span:nth-child(2) { animation-delay:0.2s; }
-  .loading-dots span:nth-child(3) { animation-delay:0.4s; }
-  @keyframes blink { 0%,100%{opacity:0} 50%{opacity:1} }
-
-  /* 결과 */
-  .result { display:none; }
-  .result.active { display:block; }
-
-  .tf-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:16px; }
-  @media(max-width:600px){
-    .tf-grid{grid-template-columns:1fr; gap:12px;}
-    .container{padding:20px 14px;}
+  .app {
+    height:100vh; height:100dvh;
+    display:grid;
+    grid-template-columns: 60px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "top top" "tools chart";
   }
 
-  .tf-card {
-    background:var(--bg2); border:1px solid var(--border);
-    padding:20px; position:relative; overflow:hidden;
-    animation:fadeIn 0.4s ease both;
+  /* 상단 바 */
+  .top {
+    grid-area:top;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:8px 12px; border-bottom:1px solid var(--border); background:var(--bg);
   }
-  .tf-card:nth-child(2){animation-delay:0.1s}
-  .tf-card:nth-child(3){animation-delay:0.2s}
-  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .brand { display:flex; align-items:baseline; gap:8px; min-width:0; }
+  .logo { font-family:var(--display); font-weight:800; font-size:18px; color:var(--btc); letter-spacing:1px; }
+  .logo span { color:var(--text-dim); font-weight:600; }
+  .venue { font-family:var(--mono); font-size:11px; color:var(--text-sub); letter-spacing:1px; }
+  .live { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:15px; font-weight:600; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--text-sub); flex:none; }
+  .dot.ok { background:var(--up); box-shadow:0 0 8px rgba(38,224,165,0.6); }
+  .dot.wait { background:var(--brake); }
+  .dot.bad { background:var(--down); }
+  .spacer { flex:1; }
 
-  .tf-card::before { content:''; position:absolute; top:0;left:0;right:0; height:3px; background:var(--border2); }
-  .tf-card.bullish::before    { background:var(--up); }
-  .tf-card.bearish::before    { background:var(--down); }
-  .tf-card.brake-s::before    { background:var(--brake); }
-  .tf-card.accel-s::before    { background:var(--accel); }
-  .tf-card.mixed::before      { background:var(--neutral); }
+  .seg { display:flex; border:1px solid var(--border2); border-radius:6px; overflow:hidden; }
+  .seg button { padding:6px 11px; font-family:var(--mono); font-size:13px; font-weight:600; color:var(--text-dim); }
+  .seg button + button { border-left:1px solid var(--border2); }
+  .seg button.on { background:var(--btc); color:var(--bg); }
 
-  .tf-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-  .tf-label {
-    font-family:var(--display); font-size:32px; letter-spacing:1px;
-    color:var(--text); font-weight:700; line-height:1;
+  .btn {
+    padding:6px 11px; border:1px solid var(--border2); border-radius:6px;
+    font-size:13px; font-weight:600; color:var(--text-dim); white-space:nowrap;
+    display:inline-flex; align-items:center; gap:5px;
   }
+  .top .btn svg { width:15px; height:15px; flex:none; }
+  .seg button { white-space:nowrap; }
+  .seg .s { display:none; }
+  .btn:hover, .seg button:hover:not(.on) { color:var(--text); border-color:var(--neutral); }
+  .btn.accent { border-color:var(--btc); color:var(--btc); }
+  .btn.danger { border-color:var(--down-dim); color:var(--down); }
 
-  .ma-row {
-    display:grid; grid-template-columns:1fr 1fr 1fr;
-    gap:8px; margin-bottom:14px; padding-bottom:14px;
-    border-bottom:1px solid var(--border);
+  /* 도구 막대 */
+  .tools {
+    grid-area:tools;
+    display:flex; flex-direction:column; gap:4px; padding:8px 6px;
+    border-right:1px solid var(--border); background:var(--bg);
   }
-  .ma-item { text-align:center; }
-  .ma-name {
-    font-family:var(--mono); font-size:11px; color:var(--text-dim);
-    letter-spacing:1.5px; margin-bottom:4px; font-weight:500;
+  .tool {
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:8px 2px; border-radius:8px; border:1px solid transparent;
+    color:var(--text-dim); font-size:10.5px; font-weight:600;
   }
-  .ma-val {
-    font-family:var(--mono); font-size:16px; color:var(--text);
-    font-weight:500; letter-spacing:-0.2px;
-  }
+  .tool svg { width:22px; height:22px; }
+  .tool:hover { color:var(--text); background:var(--bg2); }
+  .tool.on { color:var(--btc); border-color:var(--btc); background:rgba(247,147,26,0.08); }
+  .tool.erase.on { color:var(--down); border-color:var(--down); background:rgba(255,85,114,0.08); }
+  .tool-sep { height:1px; background:var(--border); margin:4px 6px; }
 
-  .alignment {
-    display:flex; align-items:center; gap:10px;
-    margin-bottom:14px; padding:10px 12px;
-    background:rgba(255,255,255,0.02); border-radius:2px;
-  }
-  .al-label {
-    font-family:var(--mono); font-size:11px; color:var(--text-dim);
-    letter-spacing:1.5px; font-weight:500;
-  }
-  .al-val {
-    font-family:var(--body); font-size:17px; font-weight:600;
-    letter-spacing:0.5px;
-  }
-  .al-bull  { color:var(--up); }
-  .al-bear  { color:var(--down); }
-  .al-mixed { color:var(--neutral); }
+  /* 차트 */
+  .chart-wrap { grid-area:chart; position:relative; min-width:0; min-height:0; }
+  #chart { position:absolute; inset:0; }
 
-  .metrics { display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
-  .metric-row {
-    display:flex; justify-content:space-between; align-items:center;
-    padding:6px 2px;
+  .legend {
+    position:absolute; top:8px; left:10px; z-index:3; pointer-events:none;
+    font-family:var(--mono); font-size:12px; font-weight:500; color:var(--text-dim);
+    display:flex; flex-wrap:wrap; gap:4px 12px; max-width:calc(100% - 90px);
   }
-  .mn {
-    font-family:var(--mono); font-size:11px; color:var(--text-dim);
-    letter-spacing:1.5px; font-weight:500;
-  }
-  .mv {
-    font-family:var(--mono); font-size:17px; font-weight:500;
-    letter-spacing:-0.2px;
-  }
-  .pos{color:var(--up)} .neg{color:var(--down)} .zero{color:var(--neutral)}
+  .legend .t { color:var(--text); }
+  .legend b { font-weight:600; }
+  .legend .u { color:var(--up); } .legend .d { color:var(--down); }
+  .legend .busy { color:var(--btc); }
 
-  .sig-badge {
-    display:block; width:100%; text-align:center;
-    padding:12px 16px; font-family:var(--display);
-    font-size:20px; letter-spacing:3px; font-weight:700;
-    border:1px solid;
+  .hint {
+    position:absolute; left:50%; bottom:14px; transform:translateX(-50%); z-index:4;
+    background:rgba(16,22,31,0.95); border:1px solid var(--btc); color:var(--text);
+    padding:8px 14px; border-radius:20px; font-size:13px; font-weight:600;
+    display:none; align-items:center; gap:10px; white-space:nowrap;
   }
-  .sig-go     { color:var(--up);      border-color:var(--up);      background:rgba(38,224,165,0.08); }
-  .sig-stop   { color:var(--down);    border-color:var(--down);    background:rgba(255,85,114,0.08); }
-  .sig-brake  { color:var(--brake);   border-color:var(--brake);   background:rgba(255,204,51,0.08); }
-  .sig-accel  { color:var(--accel);   border-color:var(--accel);   background:rgba(51,212,255,0.08); }
-  .sig-neutral{ color:var(--neutral); border-color:var(--neutral); background:rgba(122,147,173,0.08); }
+  .hint.show { display:flex; }
+  .hint.erase { border-color:var(--down); }
+  .hint button { color:var(--text-dim); font-size:12px; border:1px solid var(--border2); border-radius:12px; padding:2px 9px; }
 
-  .summary-panel {
-    background:var(--bg2); border:1px solid var(--border);
-    padding:20px 24px; animation:fadeIn 0.4s 0.3s ease both;
+  .toast {
+    position:absolute; top:40px; left:50%; transform:translateX(-50%); z-index:6;
+    max-width:min(92%, 520px); padding:10px 14px; border-radius:8px;
+    background:rgba(16,22,31,0.97); border:1px solid var(--border2);
+    font-size:13px; line-height:1.6; display:none;
   }
-  .sum-title {
-    font-family:var(--mono); font-size:11px; color:var(--text-dim);
-    letter-spacing:3px; margin-bottom:14px; font-weight:500;
-  }
-  .sum-body {
-    font-family:var(--mono); font-size:14px; color:var(--text);
-    line-height:1.9; font-weight:500;
-  }
-  .sum-body .hl   { color:var(--btc); font-weight:600; }
-  .sum-body .ut   { color:var(--up); font-weight:600; }
-  .sum-body .dt   { color:var(--down); font-weight:600; }
-  .sum-body .wt   { color:var(--brake); font-weight:600; }
-  .sum-body .it   { color:var(--accel); font-weight:600; }
+  .toast.show { display:block; }
+  .toast.err { border-color:var(--down-dim); color:var(--down); }
+  .toast .detail { font-family:var(--mono); font-size:11px; opacity:0.75; word-break:break-all; margin-top:4px; }
+  .toast button { margin-top:6px; }
 
-  .timestamp {
-    text-align:right; font-family:var(--mono); font-size:11px;
-    color:var(--text-sub); margin-top:12px; letter-spacing:1.5px; font-weight:500;
+  /* 팝업 */
+  .backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:20; display:none; align-items:center; justify-content:center; padding:16px; }
+  .backdrop.show { display:flex; }
+  .panel {
+    width:100%; max-width:440px; max-height:calc(100dvh - 32px); overflow:auto;
+    background:var(--bg2); border:1px solid var(--border2); border-radius:12px; padding:18px;
   }
-
-  .error-msg {
-    display:none; text-align:center; padding:24px;
-    font-family:var(--mono); font-size:13px; color:var(--down);
-    letter-spacing:0.5px; border:1px solid var(--down-dim);
-    background:rgba(255,85,114,0.05); line-height:1.9; margin-bottom:12px;
-    font-weight:500;
+  .panel h3 { font-size:15px; font-weight:700; margin-bottom:4px; }
+  .panel p.sub { font-size:12px; color:var(--text-dim); margin-bottom:14px; line-height:1.6; }
+  .panel .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .panel .row.end { justify-content:flex-end; }
+  .panel input[type=datetime-local], .panel textarea {
+    width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border2); border-radius:6px;
+    padding:9px 10px; font-family:var(--mono); font-size:14px; color-scheme:dark;
   }
-  .error-msg.active { display:block; }
+  .panel textarea { height:130px; font-size:11px; resize:vertical; }
+  .panel .label { font-size:11px; font-family:var(--mono); letter-spacing:1px; color:var(--text-sub); margin:14px 0 6px; }
+  .panel .count { font-family:var(--mono); color:var(--btc); }
+  .quick { display:flex; gap:6px; flex-wrap:wrap; }
+  .quick .btn { font-size:12px; padding:4px 9px; }
 
-  /* 모바일 최적화 */
-  @media(max-width:600px){
-    .logo { font-size:38px; }
-    .logo span { font-size:26px; }
-    .tf-label { font-size:36px; }
-    .ma-val { font-size:17px; }
-    .mv { font-size:18px; }
-    .sig-badge { font-size:22px; padding:14px 16px; }
-    .sum-body { font-size:14px; line-height:2; }
-    .header { align-items:flex-start; }
-    .scan-btn { font-size:18px; padding:18px; letter-spacing:6px; }
+  /* 모바일: 도구 막대를 아래로 */
+  @media (max-width: 720px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+      grid-template-areas: "top" "chart" "tools";
+    }
+    .top { padding:6px 8px; gap:6px; flex-wrap:nowrap; }
+    .venue, .logo span { display:none; }
+    .logo { font-size:15px; letter-spacing:0; }
+    .live { font-size:13px; gap:5px; }
+    .seg button { padding:6px 7px; font-size:12px; }
+    .seg .l, .top .btn .lbl { display:none; }
+    .seg .s { display:inline; }
+    .top .btn { padding:6px 7px; }
+    .top .btn svg { width:17px; height:17px; }
+    .hint { bottom:40px; }
+    .tools {
+      flex-direction:row; justify-content:space-around; gap:2px;
+      border-right:0; border-top:1px solid var(--border);
+      padding:4px 6px calc(4px + var(--safe-b));
+    }
+    .tool { flex:1; padding:6px 0; }
+    .tool-sep { display:none; }
+    .legend { font-size:11px; gap:2px 9px; }
+  }
+  @media (max-width: 370px) {
+    .top { gap:4px; }
+    .logo { display:none; }
+    .live { font-size:12px; }
+    .seg button, .top .btn { padding:5px 5px; }
+    .top .btn svg { width:16px; height:16px; }
   }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="app">
 
-  <div class="header">
-    <div>
-      <div class="logo">BTC <span>MA</span></div>
-      <div class="subtitle">MOMENTUM · ACCELERATION · ALIGNMENT</div>
+  <header class="top">
+    <div class="brand">
+      <div class="logo">BTC<span>/USDT</span></div>
+      <div class="venue">BINANCE SPOT · KST</div>
     </div>
-    <div class="header-right">
-      <div class="update-label">UPDATED</div>
-      <div class="update-time empty" id="headerTime">—</div>
+    <div class="live"><span class="dot" id="connDot" title="실시간 연결 상태"></span><span id="livePrice">—</span></div>
+    <div class="spacer"></div>
+    <div class="seg" id="ivSeg">
+      <button data-iv="5m"><span class="l">5분</span><span class="s">5m</span></button>
+      <button data-iv="15m"><span class="l">15분</span><span class="s">15m</span></button>
+      <button data-iv="1h"><span class="l">1시간</span><span class="s">1h</span></button>
     </div>
-  </div>
+    <button class="btn" id="gotoBtn" title="날짜 이동 (G)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg><span class="lbl">날짜</span></button>
+    <button class="btn" id="latestBtn" title="최신으로 (L)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 6 12 12 6 18"/><polyline points="12 6 18 12 12 18"/></svg><span class="lbl">최신</span></button>
+    <button class="btn" id="dataBtn" title="그림 내보내기 / 가져오기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 17v3h16v-3"/></svg><span class="lbl">저장</span></button>
+  </header>
 
-  <button class="scan-btn" id="scanBtn" onclick="fetchAll()">SCAN</button>
-  <div class="loading" id="loading">FETCHING DATA <span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></div>
-  <div class="error-msg" id="errorMsg"></div>
+  <nav class="tools" id="tools">
+    <button class="tool" data-tool="hline" title="수평선 (H)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="12" x2="22" y2="12"/></svg>수평선</button>
+    <button class="tool" data-tool="box" title="박스 (B)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1" fill="currentColor" fill-opacity="0.15"/></svg>박스</button>
+    <button class="tool" data-tool="dot" title="점 (D)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>점</button>
+    <button class="tool" data-tool="ray" title="레이 (R)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="3" fill="currentColor"/><line x1="6" y1="12" x2="22" y2="12"/></svg>레이</button>
+    <div class="tool-sep"></div>
+    <button class="tool erase" data-tool="erase" title="지우기 (E)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H9L4 15a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0L21 8a2 2 0 0 1 0 2.8L11 20"/><line x1="8" y1="9" x2="15" y2="16"/></svg>지우기</button>
+  </nav>
 
-  <div class="result" id="result">
-    <div class="tf-grid" id="tfGrid"></div>
-    <div class="summary-panel">
-      <div class="sum-title">SUMMARY</div>
-      <div class="sum-body" id="sumBody"></div>
-    </div>
-    <div class="timestamp" id="ts"></div>
-  </div>
-
+  <main class="chart-wrap">
+    <div id="chart"></div>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint"><span id="hintText"></span><button id="hintCancel">취소</button></div>
+    <div class="toast" id="toast"></div>
+  </main>
 </div>
-<script>
-const TFS = [
-  { label:'4H',  gran:'4H',  limit:60 },
-  { label:'1H',  gran:'1H',  limit:60 },
-  { label:'15M', gran:'15m', limit:60 },
-];
 
-async function fetchCandles(gran, limit) {
-  const api = `https://api.bitget.com/api/v2/mix/market/candles?symbol=BTCUSDT&productType=usdt-futures&granularity=${gran}&limit=${limit}`;
+<!-- 날짜 이동 -->
+<div class="backdrop" id="gotoModal">
+  <div class="panel">
+    <h3>날짜 이동</h3>
+    <p class="sub">한국시간(KST) 기준. 그 시각 봉을 화면 가운데에 놓고 세로 점선으로 표시합니다.</p>
+    <input type="datetime-local" id="gotoInput" min="2022-01-01T00:00" step="60">
+    <div class="label">빠른 이동</div>
+    <div class="quick">
+      <button class="btn" data-ago="1">1일 전</button>
+      <button class="btn" data-ago="7">1주 전</button>
+      <button class="btn" data-ago="30">1달 전</button>
+      <button class="btn" data-ago="365">1년 전</button>
+      <button class="btn" data-date="2022-01-01T00:00">2022 시작</button>
+    </div>
+    <div class="row end">
+      <button class="btn" data-close>닫기</button>
+      <button class="btn accent" id="gotoGo">이동</button>
+    </div>
+  </div>
+</div>
 
-  // 1순위: Bitget 직접 호출 (Bitget API는 CORS 허용)
-  // 2순위: corsproxy.io (fallback, 직접 호출 차단 시)
-  const attempts = [
-    { name: 'direct',    url: api },
-    { name: 'corsproxy', url: `https://corsproxy.io/?${encodeURIComponent(api)}` },
-  ];
+<!-- 내보내기 / 가져오기 -->
+<div class="backdrop" id="dataModal">
+  <div class="panel">
+    <h3>그림 저장 · 옮기기</h3>
+    <p class="sub">그림은 이 기기 브라우저에 자동 저장됩니다. 다른 기기로 옮길 때는 여기서 내보내고, 받는 기기에서 가져오세요. 가져오기는 <b>합치기</b>입니다 (기존 그림 유지, 같은 그림은 중복 안 됨).</p>
+    <div>지금 그림 <span class="count" id="drawCount">0</span>개</div>
 
-  const errors = [];
-  for (const { name, url } of attempts) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
+    <div class="label">내보내기</div>
+    <div class="row" style="margin-top:0">
+      <button class="btn accent" id="exportFile">파일로 저장 (.json)</button>
+      <button class="btn" id="exportCopy">텍스트 복사</button>
+    </div>
 
-      if (!res.ok) {
-        errors.push(`${name}: HTTP ${res.status}`);
-        continue;
-      }
+    <div class="label">가져오기</div>
+    <div class="row" style="margin-top:0">
+      <button class="btn accent" id="importFileBtn">파일 열기</button>
+      <input type="file" id="importFile" accept=".json,application/json,text/plain" hidden>
+    </div>
+    <textarea id="importText" placeholder="또는 복사한 텍스트를 여기에 붙여넣기" style="margin-top:8px"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="importPaste">붙여넣은 내용 가져오기</button>
+    </div>
 
-      const text = await res.text();
-      let json;
-      try {
-        json = JSON.parse(text);
-      } catch (parseErr) {
-        errors.push(`${name}: JSON parse failed (${text.slice(0, 50)}...)`);
-        continue;
-      }
+    <div class="label">정리</div>
+    <div class="row" style="margin-top:0">
+      <button class="btn danger" id="clearAll">그림 전체 삭제</button>
+    </div>
 
-      if (!json.data || json.data.length === 0) {
-        errors.push(`${name}: empty data (code=${json.code || 'N/A'}, msg=${json.msg || 'N/A'})`);
-        continue;
-      }
+    <div class="row end">
+      <button class="btn" data-close>닫기</button>
+    </div>
+  </div>
+</div>
 
-      console.log(`[BTC MA] ${gran} fetched via ${name}, ${json.data.length} candles`);
-      return json.data.map(d => parseFloat(d[4])).reverse(); // close prices, oldest first
-
-    } catch (e) {
-      clearTimeout(timeoutId);
-      errors.push(`${name}: ${e.name === 'AbortError' ? 'timeout(15s)' : e.message}`);
-    }
-  }
-
-  throw new Error(`[${gran}] ${errors.join(' | ')}`);
-}
-
-const ma = (cls, n) => cls.map((_,i) =>
-  i < n-1 ? null : cls.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n
-);
-
-const momentum = (cls, ma5) => cls.map((_,i) => {
-  if (i < 5 || !ma5[i]) return null;
-  const slice = cls.slice(i-4, i+1);
-  let sum = cls[i-4] - cls[i-5];
-  for (let j=1;j<slice.length;j++) sum += slice[j]-slice[j-1];
-  return (sum/5) / ma5[i] * 100;
-});
-
-const accel = mom => mom.map((m,i) =>
-  (!i || m===null || mom[i-1]===null) ? null : m - mom[i-1]
-);
-
-function analyze(closes) {
-  const m5  = ma(closes,5);
-  const m10 = ma(closes,10);
-  const m20 = ma(closes,20);
-  const mom = momentum(closes, m5);
-  const acc = accel(mom);
-  const i   = closes.length-1;
-  const [ma5,ma10,ma20,mo,ac] = [m5[i],m10[i],m20[i],mom[i],acc[i]];
-
-  let align = '혼조';
-  if (ma5&&ma10&&ma20) {
-    const a=(ma5-ma10)/ma10*100, b=(ma5-ma20)/ma20*100, c=(ma10-ma20)/ma20*100;
-    if(a>0&&b>0&&c>0) align='정배열';
-    else if(a<0&&b<0&&c<0) align='역배열';
-  }
-
-  let sig = 'NEUTRAL';
-  if (mo!==null&&ac!==null) {
-    if(mo>0&&ac<0) sig='BRAKE';
-    else if(mo<0&&ac>0) sig='ACCEL';
-    else if(align==='정배열'&&mo>0) sig='GO';
-    else if(align==='역배열'&&mo<0) sig='STOP';
-  }
-
-  return { price:closes[i], ma5, ma10, ma20, mom:mo, accel:ac, align, sig };
-}
-
-const fp = n => n?.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1}) ?? '---';
-const fv = (n,d=3) => n==null?'---':(n>=0?'+':'')+n.toFixed(d);
-const mc = v => v>0?'pos':v<0?'neg':'zero';
-
-function renderCard(lbl, d) {
-  const cc = {GO:'bullish',STOP:'bearish',BRAKE:'brake-s',ACCEL:'accel-s'}[d.sig]||'mixed';
-  const ac = {'정배열':'al-bull','역배열':'al-bear','혼조':'al-mixed'}[d.align];
-  const bc = {GO:'sig-go',STOP:'sig-stop',BRAKE:'sig-brake',ACCEL:'sig-accel',NEUTRAL:'sig-neutral'}[d.sig];
-  const sl = {GO:'▲ GO',STOP:'▼ STOP',BRAKE:'⚠ BRAKE',ACCEL:'◎ ACCEL',NEUTRAL:'— HOLD'}[d.sig];
-  return `
-    <div class="tf-card ${cc}">
-      <div class="tf-header">
-        <div class="tf-label">${lbl}</div>
-      </div>
-      <div class="ma-row">
-        <div class="ma-item"><div class="ma-name">5MA</div><div class="ma-val">${fp(d.ma5)}</div></div>
-        <div class="ma-item"><div class="ma-name">10MA</div><div class="ma-val">${fp(d.ma10)}</div></div>
-        <div class="ma-item"><div class="ma-name">20MA</div><div class="ma-val">${fp(d.ma20)}</div></div>
-      </div>
-      <div class="alignment">
-        <span class="al-label">ALIGN</span>
-        <span class="al-val ${ac}">${d.align}</span>
-      </div>
-      <div class="metrics">
-        <div class="metric-row"><span class="mn">MOMENTUM</span><span class="mv ${mc(d.mom)}">${fv(d.mom)}%</span></div>
-        <div class="metric-row"><span class="mn">ACCEL</span><span class="mv ${mc(d.accel)}">${fv(d.accel)}</span></div>
-      </div>
-      <div class="sig-badge ${bc}">${sl}</div>
-    </div>`;
-}
-
-function buildSummary(results) {
-  const sigs   = results.map(r=>r.sig);
-  const aligns = results.map(r=>r.align);
-  const lbls   = ['4H','1H','15M'];
-  const lines  = [];
-
-  const bulls=aligns.filter(a=>a==='정배열').length;
-  const bears=aligns.filter(a=>a==='역배열').length;
-  if(bulls===3)      lines.push(`<span class="ut">▲ 전 타임프레임 정배열</span> — 상승 환경 우세`);
-  else if(bears===3) lines.push(`<span class="dt">▼ 전 타임프레임 역배열</span> — 하락 환경 우세`);
-  else               lines.push(`<span class="hl">배열 혼조</span> — `+lbls.map((l,i)=>`${l}:${aligns[i]}`).join(' / '));
-
-  const bn=sigs.filter(s=>s==='BRAKE').length;
-  const an=sigs.filter(s=>s==='ACCEL').length;
-  const gn=sigs.filter(s=>s==='GO').length;
-  const sn=sigs.filter(s=>s==='STOP').length;
-
-  if(bn>=2) lines.push(`<span class="wt">⚠ BRAKE ${bn}개</span> — 고점 경고, 신규 진입 자제`);
-  if(an>=2) lines.push(`<span class="it">◎ ACCEL ${an}개</span> — 바닥 탐색, 반등 가능성 주시`);
-  if(gn===3) lines.push(`<span class="ut">▲ 전 타임프레임 GO</span> — 강한 매수 환경`);
-  if(sn===3) lines.push(`<span class="dt">▼ 전 타임프레임 STOP</span> — 강한 매도 환경`);
-
-  lines.push(lbls.map((l,i)=>{
-    const s=sigs[i];
-    const c={GO:'ut',STOP:'dt',BRAKE:'wt',ACCEL:'it'}[s]||'';
-    return `${l}:<span class="${c}">${s}</span>`;
-  }).join('  ·  '));
-
-  return lines.map(l=>`<div style="margin-bottom:4px">${l}</div>`).join('');
-}
-
-async function fetchAll() {
-  const btn=document.getElementById('scanBtn');
-  const ldg=document.getElementById('loading');
-  const res=document.getElementById('result');
-  const err=document.getElementById('errorMsg');
-
-  btn.disabled=true;
-  ldg.classList.add('active');
-  res.classList.remove('active');
-  err.classList.remove('active');
-
-  try {
-    const allCloses = await Promise.all(TFS.map(tf=>fetchCandles(tf.gran,tf.limit)));
-    const results   = allCloses.map(analyze);
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit', hour12:false});
-    const headerTimeEl = document.getElementById('headerTime');
-    headerTimeEl.textContent = timeStr;
-    headerTimeEl.classList.remove('empty');
-
-    document.getElementById('tfGrid').innerHTML = TFS.map((tf,i)=>renderCard(tf.label,results[i])).join('');
-    document.getElementById('sumBody').innerHTML = buildSummary(results);
-    document.getElementById('ts').textContent = 'UPDATED: '+now.toLocaleString('ko-KR');
-    res.classList.add('active');
-
-  } catch(e) {
-    console.error('[BTC MA] fetch failed:', e);
-    err.innerHTML = `
-      <div style="color:var(--down);font-size:15px;margin-bottom:10px;font-weight:600">▼ 판단 불가 — 데이터 없음</div>
-      <div style="font-size:12px;opacity:0.75;text-align:left;white-space:pre-wrap;word-break:break-all;line-height:1.7">${e.message}</div>
-      <div style="font-size:11px;opacity:0.55;margin-top:10px">콘솔(F12)에서 상세 로그 확인 가능 · 네트워크 문제일 경우 잠시 후 재시도</div>
-    `;
-    err.classList.add('active');
-  } finally {
-    ldg.classList.remove('active');
-    btn.disabled=false;
-  }
-}
-</script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
