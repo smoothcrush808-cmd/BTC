@@ -64,6 +64,7 @@ const PAGE = 1000;               // 바이낸스 klines 최대 개수
 const EDGE = 150;                // 가장자리에서 이 정도 봉 남으면 더 받는다
 const STORE_KEY = 'psychChart.drawings.v1';
 const PREF_KEY = 'psychChart.prefs.v1';
+const BM_KEY = 'psychChart.bookmarks.v1';
 
 const IVS = { '5m': 300, '15m': 900, '1h': 3600 };
 
@@ -327,11 +328,11 @@ ts.subscribeVisibleLogicalRangeChange(() => {
 });
 
 // 특정 시각(실제 ms)으로 이동
-async function jumpTo(ms, { mark = true } = {}) {
+async function jumpTo(ms, { mark = true, width: w = null } = {}) {
   const s = sec();
   const t = Math.floor(msToChart(ms) / s) * s; // 봉 시작 시각으로 내림 (KST로 민 값 기준이라 1h도 정각)
   if (mark) S.jumpT = t;
-  const width = (() => { const r = ts.getVisibleLogicalRange(); return r ? Math.max(40, r.to - r.from) : 160; })();
+  const width = w || (() => { const r = ts.getVisibleLogicalRange(); return r ? Math.max(40, r.to - r.from) : 160; })();
 
   const inRange = S.bars.length && t >= S.bars[0].time && t <= S.bars[S.bars.length - 1].time;
   if (!inRange) {
@@ -415,7 +416,8 @@ function timeToX(t) {
 }
 
 // 간격을 바꿔도 같은 시각을 보도록
-function switchInterval(iv) {
+// centerMs를 주면 그 시각으로 (북마크), 아니면 지금 보던 시각을 유지
+function switchInterval(iv, { centerMs = null, width = null } = {}) {
   if (iv === S.iv || !IVS[iv]) return;
   const r = ts.getVisibleLogicalRange();
   const wasLatest = S.atLatest && r && r.to >= S.bars.length - 3;
@@ -435,7 +437,9 @@ function switchInterval(iv) {
   S.noMoreLeft = c ? c.noMoreLeft : false;
   series.setData(S.bars);
 
-  if (wasLatest || centerT == null) {
+  if (centerMs != null) {
+    jumpTo(centerMs, { mark: false, width });
+  } else if (wasLatest || centerT == null) {
     if (c && c.atLatest) { ts.scrollToRealTime(); drawings.refresh(); updateLegend(); backfill(); }
     else loadLatest();
   } else {
@@ -961,6 +965,82 @@ chart.subscribeCrosshairMove(param => {
   }
 });
 
+// ───────────────────────── 시점 북마크 (보던 시각·봉 간격·확대 정도를 저장 → 누르면 그대로 돌아감)
+// 저장 형식: { id, name, t (화면 가운데 실제 ms), iv, w (보이는 봉 수) }
+const bookmarks = (() => {
+  const ok = b => b && typeof b.id === 'string' && typeof b.name === 'string'
+    && Number.isFinite(b.t) && IVS[b.iv] && Number.isFinite(b.w);
+  let list = (store.get(BM_KEY, []) || []).filter(ok);
+  const persist = () => {
+    if (!store.set(BM_KEY, list)) toast('이 브라우저에 저장하지 못했습니다', { error: true });
+    render();
+  };
+
+  function render() {
+    const ul = $('bmList');
+    ul.innerHTML = '';
+    if (!list.length) {
+      const li = document.createElement('li'); li.className = 'bm-empty';
+      li.textContent = '아직 없음 — 공부하던 자리에서 저장해 두면 여기서 바로 돌아갑니다';
+      ul.appendChild(li);
+    }
+    for (const b of list) {
+      const li = document.createElement('li');
+      const go = document.createElement('button'); go.className = 'bm-go';
+      const nm = document.createElement('span'); nm.className = 'bm-name'; nm.textContent = b.name;
+      const sub = document.createElement('span'); sub.className = 'bm-sub';
+      sub.textContent = `${fmtChartTime(msToChart(b.t))} · ${{ '5m': '5분', '15m': '15분', '1h': '1시간' }[b.iv]}`;
+      go.append(nm, sub);
+      go.addEventListener('click', () => { closeModal($('gotoModal')); goTo(b); });
+      const del = document.createElement('button'); del.className = 'bm-del'; del.textContent = '✕'; del.title = '삭제';
+      del.addEventListener('click', () => {
+        if (!confirm(`'${b.name}' 북마크를 지울까요?`)) return;
+        list = list.filter(x => x.id !== b.id); persist();
+      });
+      li.append(go, del);
+      ul.appendChild(li);
+    }
+    $('bmCount').textContent = list.length;
+  }
+
+  function goTo(b) {
+    if (b.iv !== S.iv) switchInterval(b.iv, { centerMs: b.t, width: b.w });
+    else jumpTo(b.t, { mark: false, width: b.w });
+  }
+
+  function saveCurrent(name) {
+    const r = ts.getVisibleLogicalRange();
+    if (!r || !S.bars.length) { toast('차트가 아직 안 떴습니다', { error: true }); return; }
+    const t = chartToMs(logicalToTime((r.from + r.to) / 2));
+    const b = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      name: (name || '').trim() || fmtChartTime(msToChart(t)),
+      t, iv: S.iv, w: Math.round(r.to - r.from),
+    };
+    list.unshift(b); persist();
+    toast(`📌 '${b.name}' 저장했습니다`);
+  }
+
+  function importMany(arr) {
+    if (!Array.isArray(arr)) return 0;
+    const have = new Set(list.map(b => b.id));
+    let added = 0;
+    for (const b of arr) {
+      if (!ok(b) || have.has(b.id)) continue;
+      list.push({ id: b.id, name: b.name, t: b.t, iv: b.iv, w: b.w }); have.add(b.id); added++;
+    }
+    list.sort((a, b) => b.id.localeCompare(a.id)); // 최근 저장한 것이 위로 (id가 저장 시각 기반)
+    persist();
+    return added;
+  }
+
+  render();
+  return { all: () => list.slice(), count: () => list.length, saveCurrent, importMany, goTo };
+})();
+
+$('bmSave').addEventListener('click', () => { bookmarks.saveCurrent($('bmName').value); $('bmName').value = ''; });
+$('bmName').addEventListener('keydown', e => { if (e.key === 'Enter') $('bmSave').click(); });
+
 // ───────────────────────── 팝업
 function openModal(id) { $(id).classList.add('show'); }
 function closeModal(el) { el.classList.remove('show'); }
@@ -1015,10 +1095,14 @@ $('latestBtn').addEventListener('click', () => {
 function exportPayload() {
   return JSON.stringify({
     app: 'btc-psych-chart', version: 1, symbol: SYMBOL,
-    exportedAt: new Date().toISOString(), drawings: drawings.all(),
+    exportedAt: new Date().toISOString(), drawings: drawings.all(), bookmarks: bookmarks.all(),
   }, null, 1);
 }
-$('dataBtn').addEventListener('click', () => { $('drawCount').textContent = drawings.count(); openModal('dataModal'); });
+$('dataBtn').addEventListener('click', () => {
+  $('drawCount').textContent = drawings.count();
+  $('bmCount2').textContent = bookmarks.count();
+  openModal('dataModal');
+});
 $('exportFile').addEventListener('click', () => {
   const blob = new Blob([exportPayload()], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1029,7 +1113,7 @@ $('exportFile').addEventListener('click', () => {
 });
 $('exportCopy').addEventListener('click', async () => {
   const text = exportPayload();
-  try { await navigator.clipboard.writeText(text); toast(`그림 ${drawings.count()}개를 복사했습니다`); }
+  try { await navigator.clipboard.writeText(text); toast(`그림 ${drawings.count()}개 · 북마크 ${bookmarks.count()}개를 복사했습니다`); }
   catch { $('importText').value = text; $('importText').select(); toast('자동 복사가 막혀 있어요 — 아래 칸의 텍스트를 직접 복사하세요', { ms: 5000 }); }
 });
 function importText(text) {
@@ -1038,8 +1122,10 @@ function importText(text) {
   const arr = Array.isArray(data) ? data : data && data.drawings;
   if (!Array.isArray(arr)) { toast('그림 목록을 찾지 못했습니다', { error: true }); return; }
   const { added, bad } = drawings.importMany(arr);
+  const bmAdded = bookmarks.importMany(data && data.bookmarks);
   $('drawCount').textContent = drawings.count();
-  toast(`${added}개 가져왔습니다${bad ? ` (잘못된 항목 ${bad}개 건너뜀)` : ''}`);
+  $('bmCount2').textContent = bookmarks.count();
+  toast(`그림 ${added}개${bmAdded ? ` · 북마크 ${bmAdded}개` : ''} 가져왔습니다${bad ? ` (잘못된 항목 ${bad}개 건너뜀)` : ''}`);
 }
 $('importFileBtn').addEventListener('click', () => $('importFile').click());
 $('importFile').addEventListener('change', async e => {
@@ -1103,5 +1189,5 @@ loadLatest();
 connectWs();
 
 // 디버그·테스트용
-window.__psych = { S, chart, series, drawings, jumpTo, switchInterval, wide };
+window.__psych = { S, chart, series, drawings, bookmarks, jumpTo, switchInterval, wide };
 })();
