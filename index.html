@@ -112,6 +112,13 @@
   .tool:hover { color:var(--text); background:var(--bg2); }
   .tool.on { color:var(--btc); border-color:var(--btc); background:rgba(247,147,26,0.08); }
   .tool.erase.on { color:var(--down); border-color:var(--down); background:rgba(255,85,114,0.08); }
+  .tool:disabled { opacity:0.3; cursor:default; }
+  .tool { white-space:nowrap; letter-spacing:-0.3px; }
+  .tool:disabled:hover { background:none; color:var(--text-dim); }
+  .panel input.field {
+    width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border2); border-radius:6px;
+    padding:9px 10px; font-family:var(--body); font-size:16px;
+  }
   .tool-sep { height:1px; background:var(--border); margin:4px 6px; }
 
   /* 차트 */
@@ -315,7 +322,11 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>점</button>
     <button class="tool" data-tool="ray" title="레이 (R)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="3" fill="currentColor"/><line x1="6" y1="12" x2="22" y2="12"/></svg>레이</button>
+    <button class="tool" data-tool="text" title="텍스트 (T)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="5 7 5 4 19 4 19 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="20" x2="15" y2="20"/></svg>텍스트</button>
     <div class="tool-sep"></div>
+    <button class="tool" id="undoBtn" title="되돌리기 (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>되돌리기</button>
     <button class="tool erase" data-tool="erase" title="지우기 (E)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H9L4 15a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0L21 8a2 2 0 0 1 0 2.8L11 20"/><line x1="8" y1="9" x2="15" y2="16"/></svg>지우기</button>
   </nav>
@@ -324,7 +335,7 @@
     <div id="chart"></div>
     <div class="legend" id="legend"></div>
     <div class="hint" id="hint">
-      <div class="hint-row"><span id="hintText"></span><button id="hintDelete" class="del" hidden>삭제</button><button id="hintCancel">취소</button></div>
+      <div class="hint-row"><span id="hintText"></span><button id="hintEditText" hidden>글 수정</button><button id="hintDelete" class="del" hidden>삭제</button><button id="hintCancel">취소</button></div>
       <div class="swatches" id="swatches" hidden></div>
     </div>
     <div class="toast" id="toast"></div>
@@ -356,6 +367,19 @@
     <div class="row end">
       <button class="btn" data-close>닫기</button>
       <button class="btn accent" id="gotoGo">이동</button>
+    </div>
+  </div>
+</div>
+
+<!-- 텍스트 입력 -->
+<div class="backdrop" id="textModal">
+  <div class="panel">
+    <h3>텍스트</h3>
+    <p class="sub">탭한 자리(시각·가격)에 붙습니다. 최대 60자.</p>
+    <input type="text" id="textInput" class="field" maxlength="60" placeholder="예: 매수세 소진?" autocomplete="off">
+    <div class="row end">
+      <button class="btn" data-close>취소</button>
+      <button class="btn accent" id="textOk">확인</button>
     </div>
   </div>
 </div>
@@ -397,6 +421,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 고칠 때마다 v를 올린다: 배포 직후 브라우저가 옛 app.js를 쓰지 않도록 -->
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
