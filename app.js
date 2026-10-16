@@ -545,7 +545,7 @@ function updateLegend() {
 
 // ───────────────────────── 색 (트레이딩뷰 기본 10색에서 남보라를 빼고 흰색을 넣음)
 const PALETTE = ['#ffffff', '#f23645', '#ff9800', '#ffeb3b', '#4caf50', '#089981', '#00bcd4', '#2962ff', '#9c27b0', '#e91e63'];
-const DEFAULT_COLOR = { hline: C.hline, ray: C.ray, dot: C.dot, box: C.box };
+const DEFAULT_COLOR = { hline: C.hline, ray: C.ray, dot: C.dot, box: C.box, text: '#ffffff' };
 const isHex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 const colorOf = d => (isHex(d.c) ? d.c : DEFAULT_COLOR[d.type]);
 // 밝은 바탕(흰·노랑 등)엔 어두운 글씨
@@ -560,7 +560,9 @@ for (const [k, v] of Object.entries(store.get(PREF_KEY, {}).colors || {})) if (k
 function saveToolColors() { store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), colors: toolColors }); }
 
 // ───────────────────────── 그림 (시각·가격으로 저장 → 확대·스크롤·간격 변경에도 따라온다)
-// 저장 형식: { id, type: 'hline'|'ray'|'dot'|'box', p, t?, p2?, t2?, c? }  (t = 실제 UTC ms, c = 색 #rrggbb)
+// 저장 형식: { id, type: 'hline'|'ray'|'dot'|'box'|'text', p, t?, p2?, t2?, c?, text? }  (t = 실제 UTC ms, c = 색 #rrggbb)
+const TEXT_FONT = "600 13px 'Pretendard Variable', -apple-system, sans-serif";
+const TEXT_MAX = 60;
 const drawings = (() => {
   let list = (store.get(STORE_KEY, { drawings: [] }).drawings || []).filter(valid);
   let pending = null;   // 박스 첫 꼭짓점 {t, p}
@@ -568,6 +570,16 @@ const drawings = (() => {
   let hot = null;       // 지우기 후보 id
   let sel = null;       // 수정 중인 그림 id
   let requestUpdate = () => {};
+  // 되돌리기: 바꾸기 직전 목록을 쌓아 둔다 (최대 50단계, 새로고침하면 비워짐)
+  let history = [];
+  let onHistory = () => {};
+  function snapshot() {
+    history.push(JSON.stringify(list));
+    if (history.length > 50) history.shift();
+    onHistory(history.length);
+  }
+  const measure = document.createElement('canvas').getContext('2d');
+  function textWidth(t) { measure.font = TEXT_FONT; return measure.measureText(t).width; }
   let axisViews = [];
 
   function valid(d) {
@@ -577,6 +589,7 @@ const drawings = (() => {
       case 'hline': return num(d.p);
       case 'ray': case 'dot': return num(d.p) && num(d.t);
       case 'box': return num(d.p) && num(d.t) && num(d.p2) && num(d.t2);
+      case 'text': return num(d.p) && num(d.t) && typeof d.text === 'string' && d.text.trim().length > 0 && d.text.length <= 200;
       default: return false;
     }
   }
@@ -662,6 +675,17 @@ const drawings = (() => {
         ctx.strokeRect(Math.round(l) + 0.5, Math.round(t) + 0.5, Math.round(r - l), Math.round(b - t));
         break;
       }
+      case 'text': {
+        const x = cx(d); if (x == null) break;
+        ctx.font = TEXT_FONT; ctx.textBaseline = 'middle';
+        // 캔들 위에서도 읽히게 옅은 어두운 바탕
+        const tw = textWidth(d.text);
+        ctx.fillStyle = 'rgba(10,14,20,0.6)';
+        ctx.fillRect(x + 1, y - 10, tw + 6, 20);
+        ctx.fillStyle = isHot ? C.erase : color;
+        ctx.fillText(d.text, x + 4, y);
+        break;
+      }
     }
     ctx.restore();
   }
@@ -699,6 +723,10 @@ const drawings = (() => {
       else if (d.type === 'ray') {
         const x = cx(d); if (x == null) continue;
         dist = px >= x ? Math.abs(py - y) : Math.hypot(px - x, py - y);
+      } else if (d.type === 'text') {
+        const x = cx(d); if (x == null) continue;
+        const l = x, r = x + 4 + textWidth(d.text), t = y - 9, b = y + 9;
+        dist = Math.hypot(Math.max(l - px, 0, px - r), Math.max(t - py, 0, py - b));
       } else if (d.type === 'box') {
         const x1 = cx(d), x2 = timeToX(msToChart(d.t2)), y2 = cy(d.p2);
         if (x1 == null || x2 == null || y2 == null) continue;
@@ -739,8 +767,18 @@ const drawings = (() => {
     refresh: () => requestUpdate(),
     all: () => list.slice(),
     count: () => list.length,
-    add(d) { list.push({ id: newId(), ...d }); persist(); },
-    remove(id) { list = list.filter(d => d.id !== id); hot = null; if (sel === id) sel = null; persist(); },
+    add(d) { snapshot(); list.push({ id: newId(), ...d }); persist(); },
+    remove(id) { snapshot(); list = list.filter(d => d.id !== id); hot = null; if (sel === id) sel = null; persist(); },
+    snapshot,
+    undo() {
+      if (!history.length) return false;
+      list = JSON.parse(history.pop()).filter(valid);
+      hot = null;
+      persist();
+      onHistory(history.length);
+      return true;
+    },
+    onHistory(cb) { onHistory = cb; cb(history.length); },
     get: id => list.find(d => d.id === id) || null,
     // 끄는 동안은 그리기만 다시 하고, 손을 뗄 때 save()로 저장
     patch(id, fields) { const d = list.find(x => x.id === id); if (d) { Object.assign(d, fields); requestUpdate(); } },
@@ -753,8 +791,9 @@ const drawings = (() => {
       for (const hd of handlesOf(d, w)) { const dist = Math.hypot(px - hd.x, py - hd.y); if (dist < bestD) { bestD = dist; best = hd; } }
       return best;
     },
-    clear() { list = []; sel = null; persist(); },
+    clear() { snapshot(); list = []; sel = null; persist(); },
     importMany(arr) {
+      snapshot();
       const have = new Set(list.map(d => d.id));
       let added = 0, bad = 0;
       for (const d of arr) {
@@ -764,8 +803,10 @@ const drawings = (() => {
         if (d.t != null) clean.t = d.t;
         if (d.type === 'box') { clean.p2 = d.p2; clean.t2 = d.t2; }
         if (isHex(d.c)) clean.c = d.c;
+        if (d.type === 'text') clean.text = d.text;
         list.push(clean); have.add(d.id); added++;
       }
+      if (!added) { history.pop(); onHistory(history.length); }
       persist();
       return { added, bad };
     },
@@ -786,7 +827,9 @@ const HINTS = {
   box: '박스 — 첫 꼭짓점을 탭하세요',
   box2: '박스 — 반대쪽 꼭짓점을 탭하세요',
   erase: '지우기 — 지울 그림을 탭하세요',
+  text: '텍스트 — 넣을 위치를 탭하세요',
   edit: '끌어서 이동 · ○로 크기 조절',
+  editText: '끌어서 이동',
 };
 
 function setTool(t) {
@@ -794,7 +837,7 @@ function setTool(t) {
   tool = t;
   drawings.setPending(null);
   drawings.setHot(null);
-  document.querySelectorAll('#tools .tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  document.querySelectorAll('#tools .tool[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   showHint(t ? HINTS[t] : null);
 }
 function showHint(text) {
@@ -802,6 +845,8 @@ function showHint(text) {
   ui.hint.classList.toggle('erase', tool === 'erase');
   ui.hintText.textContent = text || '';
   $('hintDelete').hidden = !drawings.getSel();
+  const sd0 = drawings.getSel() && drawings.get(drawings.getSel());
+  $('hintEditText').hidden = !(sd0 && sd0.type === 'text');
   $('hintCancel').textContent = drawings.getSel() ? '완료' : '취소';
   renderSwatches();
 }
@@ -823,7 +868,7 @@ function renderSwatches() {
     b.addEventListener('click', () => {
       toolColors[type] = c; saveToolColors();
       const id = drawings.getSel();
-      if (id) { drawings.patch(id, { c }); drawings.save(); }
+      if (id) { drawings.snapshot(); drawings.patch(id, { c }); drawings.save(); }
       drawings.refresh();
       renderSwatches();
     });
@@ -837,11 +882,50 @@ function select(id) {
   drawings.setSel(id);
   chart.applyOptions({ handleScroll: !id, handleScale: !id });
   if (id) { tool = null; document.querySelectorAll('#tools .tool').forEach(b => b.classList.remove('on')); }
-  showHint(id ? HINTS.edit : null);
+  showHint(id ? editHint() : null);
+}
+function editHint() {
+  const d = drawings.getSel() && drawings.get(drawings.getSel());
+  return d && d.type === 'text' ? HINTS.editText : HINTS.edit;
 }
 
-document.querySelectorAll('#tools .tool').forEach(b => {
+document.querySelectorAll('#tools .tool[data-tool]').forEach(b => {
   b.addEventListener('click', () => setTool(tool === b.dataset.tool ? null : b.dataset.tool));
+});
+
+// 되돌리기
+function undo() {
+  const sid = drawings.getSel();
+  if (!drawings.undo()) { toast('되돌릴 것이 없습니다', { ms: 1500 }); return; }
+  if (sid && !drawings.get(sid)) select(null);
+  else if (sid) showHint(editHint());
+}
+$('undoBtn').addEventListener('click', undo);
+drawings.onHistory(n => { $('undoBtn').disabled = !n; });
+
+// 텍스트 입력창 (새로 넣기 / 고치기)
+let textCtx = null; // { mode: 'new', pt, c } | { mode: 'edit', id }
+function openTextModal(ctx, value) {
+  textCtx = ctx;
+  $('textInput').value = value || '';
+  openModal('textModal');
+  setTimeout(() => $('textInput').focus(), 0);
+}
+function commitText() {
+  const v = $('textInput').value.trim().slice(0, TEXT_MAX);
+  closeModal($('textModal'));
+  const ctx = textCtx; textCtx = null;
+  if (!ctx || !v) return;
+  if (ctx.mode === 'new') drawings.add({ type: 'text', t: ctx.pt.t, p: ctx.pt.p, c: ctx.c, text: v });
+  else if (drawings.get(ctx.id) && drawings.get(ctx.id).text !== v) {
+    drawings.snapshot(); drawings.patch(ctx.id, { text: v }); drawings.save();
+  }
+}
+$('textOk').addEventListener('click', commitText);
+$('textInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commitText(); } });
+$('hintEditText').addEventListener('click', () => {
+  const d = drawings.get(drawings.getSel());
+  if (d && d.type === 'text') openTextModal({ mode: 'edit', id: d.id }, d.text);
 });
 $('hintCancel').addEventListener('click', () => { select(null); setTool(null); });
 $('hintDelete').addEventListener('click', () => { const id = drawings.getSel(); select(null); if (id) drawings.remove(id); });
@@ -883,6 +967,7 @@ chartEl.addEventListener('pointermove', e => {
   const { x, y } = localXY(e);
   const l = ts.coordinateToLogical(x), p = series.coordinateToPrice(y);
   if (l == null || p == null) return;
+  if (!drag.moved) drawings.snapshot(); // 끌기 한 번 = 되돌리기 한 단계
   drag.moved = true;
   const o = drag.orig, round = v => Math.round(v * 100) / 100;
   if (drag.handle) {
@@ -943,6 +1028,7 @@ function onTap(x, y) {
   if (tool === 'hline') drawings.add({ type: 'hline', p: pt.p, c });
   else if (tool === 'dot') drawings.add({ type: 'dot', t: pt.t, p: pt.p, c });
   else if (tool === 'ray') drawings.add({ type: 'ray', t: pt.t, p: pt.p, c });
+  else if (tool === 'text') { setTool(null); openTextModal({ mode: 'new', pt, c }, ''); return; }
   else if (tool === 'box') {
     const first = drawings.getPending();
     if (!first) { drawings.setPending(pt); showHint(HINTS.box2); return; }
@@ -1043,7 +1129,10 @@ $('bmName').addEventListener('keydown', e => { if (e.key === 'Enter') $('bmSave'
 
 // ───────────────────────── 팝업
 function openModal(id) { $(id).classList.add('show'); }
-function closeModal(el) { el.classList.remove('show'); }
+function closeModal(el) {
+  el.classList.remove('show');
+  if (el.contains(document.activeElement)) document.activeElement.blur(); // 숨은 입력칸이 단축키를 막지 않게
+}
 document.querySelectorAll('.backdrop').forEach(bd => {
   bd.addEventListener('click', e => { if (e.target === bd || e.target.hasAttribute('data-close')) closeModal(bd); });
 });
@@ -1151,7 +1240,11 @@ document.querySelectorAll('#ivSeg button').forEach(b => b.addEventListener('clic
 
 // 단축키 (PC)
 document.addEventListener('keydown', e => {
-  if (e.target.matches('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+  const inField = e.target.matches('input, textarea');
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !inField) {
+    e.preventDefault(); undo(); return;
+  }
+  if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Escape') {
     const open = document.querySelector('.backdrop.show');
     if (open) closeModal(open); else { select(null); setTool(null); }
@@ -1159,7 +1252,7 @@ document.addEventListener('keydown', e => {
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && drawings.getSel()) { $('hintDelete').click(); return; }
   if (document.querySelector('.backdrop.show')) return;
-  const map = { h: 'hline', b: 'box', d: 'dot', r: 'ray', e: 'erase' };
+  const map = { h: 'hline', b: 'box', d: 'dot', r: 'ray', t: 'text', e: 'erase' };
   const k = e.key.toLowerCase();
   if (map[k]) setTool(tool === map[k] ? null : map[k]);
   else if (k === 'g') $('gotoBtn').click();
