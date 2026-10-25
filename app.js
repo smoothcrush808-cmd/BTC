@@ -545,7 +545,7 @@ function updateLegend() {
 
 // ───────────────────────── 색 (트레이딩뷰 기본 10색에서 남보라를 빼고 흰색을 넣음)
 const PALETTE = ['#ffffff', '#f23645', '#ff9800', '#ffeb3b', '#4caf50', '#089981', '#00bcd4', '#2962ff', '#9c27b0', '#e91e63'];
-const DEFAULT_COLOR = { hline: C.hline, ray: C.ray, dot: C.dot, box: C.box, text: '#ffffff' };
+const DEFAULT_COLOR = { hline: C.hline, vline: C.hline, ray: C.ray, dot: C.dot, box: C.box, text: '#ffffff' };
 const isHex = v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 const colorOf = d => (isHex(d.c) ? d.c : DEFAULT_COLOR[d.type]);
 // 밝은 바탕(흰·노랑 등)엔 어두운 글씨
@@ -560,7 +560,7 @@ for (const [k, v] of Object.entries(store.get(PREF_KEY, {}).colors || {})) if (k
 function saveToolColors() { store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), colors: toolColors }); }
 
 // ───────────────────────── 그림 (시각·가격으로 저장 → 확대·스크롤·간격 변경에도 따라온다)
-// 저장 형식: { id, type: 'hline'|'ray'|'dot'|'box'|'text', p, t?, p2?, t2?, c?, text? }  (t = 실제 UTC ms, c = 색 #rrggbb)
+// 저장 형식: { id, type: 'hline'|'vline'|'ray'|'dot'|'box'|'text', p?, t?, p2?, t2?, c?, text? }  (t = 실제 UTC ms, c = 색 #rrggbb)
 const TEXT_FONT = "600 13px 'Pretendard Variable', -apple-system, sans-serif";
 const TEXT_MAX = 60;
 const drawings = (() => {
@@ -587,6 +587,7 @@ const drawings = (() => {
     const num = v => typeof v === 'number' && isFinite(v);
     switch (d.type) {
       case 'hline': return num(d.p);
+      case 'vline': return num(d.t);
       case 'ray': case 'dot': return num(d.p) && num(d.t);
       case 'box': return num(d.p) && num(d.t) && num(d.p2) && num(d.t2);
       case 'text': return num(d.p) && num(d.t) && typeof d.text === 'string' && d.text.trim().length > 0 && d.text.length <= 200;
@@ -602,8 +603,15 @@ const drawings = (() => {
     $('drawCount').textContent = list.length;
   }
 
-  // 가격축 라벨: 수평선·레이
+  // 가격축 라벨: 수평선·레이 / 시간축 라벨: 수직선
+  let timeViews = [];
   function rebuildAxis() {
+    timeViews = list.filter(d => d.type === 'vline').map(d => ({
+      coordinate: () => cx(d) ?? -100,
+      text: () => fmtChartTime(msToChart(d.t)),
+      textColor: () => (hot === d.id ? '#ffffff' : labelTextColor(colorOf(d))),
+      backColor: () => (hot === d.id ? C.erase : colorOf(d)),
+    }));
     axisViews = list.filter(d => d.type === 'hline' || d.type === 'ray').map(d => {
       return {
         coordinate: () => series.priceToCoordinate(d.p) ?? -100,
@@ -629,7 +637,7 @@ const drawings = (() => {
     }
     for (const d of list) drawOne(ctx, d, w, h, hot === d.id);
     const sd = sel && list.find(d => d.id === sel);
-    if (sd) drawHandles(ctx, sd, w);
+    if (sd) drawHandles(ctx, sd, w, h);
     if (pending) {
       const c = toolColors.box;
       const a = { type: 'dot', t: pending.t, p: pending.p, c };
@@ -639,6 +647,15 @@ const drawings = (() => {
   }
 
   function drawOne(ctx, d, w, h, isHot, ghost = false) {
+    if (d.type === 'vline') {
+      const x = cx(d); if (x == null) return;
+      ctx.save();
+      ctx.lineWidth = isHot ? 2.5 : 1.5;
+      ctx.strokeStyle = isHot ? C.erase : colorOf(d);
+      ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, 0); ctx.lineTo(Math.round(x) + 0.5, h); ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const y = cy(d.p);
     if (y == null) return;
     ctx.save();
@@ -690,8 +707,9 @@ const drawings = (() => {
     ctx.restore();
   }
 
-  // 수정 손잡이: 박스는 네 꼭짓점, 레이·점은 시작점, 수평선은 화면 가운데 한 점
-  function handlesOf(d, w) {
+  // 수정 손잡이: 박스는 네 꼭짓점, 레이·점·글은 시작점, 수평선·수직선은 화면 가운데 한 점
+  function handlesOf(d, w, h) {
+    if (d.type === 'vline') { const x = cx(d); return x == null ? [] : [{ x, y: h / 2, tk: 't', pk: null }]; }
     const y = cy(d.p); if (y == null) return [];
     if (d.type === 'hline') return [{ x: w / 2, y, tk: null, pk: 'p' }];
     const x = cx(d); if (x == null) return [];
@@ -703,10 +721,10 @@ const drawings = (() => {
       { x, y: y2, tk: 't', pk: 'p2' }, { x: x2, y: y2, tk: 't2', pk: 'p2' },
     ];
   }
-  function drawHandles(ctx, d, w) {
+  function drawHandles(ctx, d, w, h) {
     ctx.save();
     ctx.fillStyle = C.bg; ctx.strokeStyle = C.btc; ctx.lineWidth = 2;
-    for (const hd of handlesOf(d, w)) {
+    for (const hd of handlesOf(d, w, h)) {
       ctx.beginPath(); ctx.arc(hd.x, hd.y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
     ctx.restore();
@@ -716,6 +734,11 @@ const drawings = (() => {
   function hitTest(px, py, tol = 16, only = null) {
     let best = null, bestD = tol;
     for (const d of only ? list.filter(x => x.id === only) : list) {
+      if (d.type === 'vline') {
+        const x = cx(d);
+        if (x != null && Math.abs(px - x) < bestD) { bestD = Math.abs(px - x); best = d; }
+        continue;
+      }
       const y = cy(d.p); if (y == null) continue;
       let dist = Infinity;
       if (d.type === 'hline') dist = Math.abs(py - y);
@@ -756,6 +779,7 @@ const drawings = (() => {
     updateAllViews: () => {},
     paneViews: () => paneViews,
     priceAxisViews: () => axisViews,
+    timeAxisViews: () => timeViews,
   };
   series.attachPrimitive(primitive);
   rebuildAxis();
@@ -785,10 +809,10 @@ const drawings = (() => {
     save: () => persist(),
     setSel(id) { sel = id; requestUpdate(); },
     getSel: () => sel,
-    handleAt(px, py, w, tol) {
+    handleAt(px, py, w, h, tol) {
       const d = sel && list.find(x => x.id === sel); if (!d) return null;
       let best = null, bestD = tol;
-      for (const hd of handlesOf(d, w)) { const dist = Math.hypot(px - hd.x, py - hd.y); if (dist < bestD) { bestD = dist; best = hd; } }
+      for (const hd of handlesOf(d, w, h)) { const dist = Math.hypot(px - hd.x, py - hd.y); if (dist < bestD) { bestD = dist; best = hd; } }
       return best;
     },
     clear() { snapshot(); list = []; sel = null; persist(); },
@@ -799,7 +823,8 @@ const drawings = (() => {
       for (const d of arr) {
         if (!valid(d)) { bad++; continue; }
         if (have.has(d.id)) continue;
-        const clean = { id: d.id, type: d.type, p: d.p };
+        const clean = { id: d.id, type: d.type };
+        if (d.p != null) clean.p = d.p;
         if (d.t != null) clean.t = d.t;
         if (d.type === 'box') { clean.p2 = d.p2; clean.t2 = d.t2; }
         if (isHex(d.c)) clean.c = d.c;
@@ -822,6 +847,7 @@ const drawings = (() => {
 let tool = null;
 const HINTS = {
   hline: '수평선 — 가격 위치를 탭하세요',
+  vline: '수직선 — 시각(봉) 위치를 탭하세요',
   dot: '점 — 찍을 위치를 탭하세요',
   ray: '레이 — 시작점을 탭하세요 (오른쪽으로 뻗음)',
   box: '박스 — 첫 꼭짓점을 탭하세요',
@@ -886,7 +912,7 @@ function select(id) {
 }
 function editHint() {
   const d = drawings.getSel() && drawings.get(drawings.getSel());
-  return d && d.type === 'text' ? HINTS.editText : HINTS.edit;
+  return d && d.type === 'box' ? HINTS.edit : HINTS.editText; // 크기 조절은 박스만
 }
 
 document.querySelectorAll('#tools .tool[data-tool]').forEach(b => {
@@ -946,16 +972,16 @@ let multiTouch = false;
 let drag = null; // {id, pointerId, handle|null, start:{l,p}, orig}
 function localXY(e) {
   const r = chartEl.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width - chart.priceScale('right').width() };
+  return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width - chart.priceScale('right').width(), h: r.height - ts.height() };
 }
 chartEl.addEventListener('pointerdown', e => {
   taps.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
   if (taps.size > 1) { multiTouch = true; drag = null; return; }
   const sid = drawings.getSel();
   if (!sid || tool) return;
-  const { x, y, w } = localXY(e);
+  const { x, y, w, h } = localXY(e);
   const tol = e.pointerType === 'mouse' ? 10 : 22;
-  const handle = drawings.handleAt(x, y, w, tol);
+  const handle = drawings.handleAt(x, y, w, h, tol);
   if (!handle && !drawings.hitTest(x, y, tol, sid)) return;
   const l = ts.coordinateToLogical(x), p = series.coordinateToPrice(y);
   if (l == null || p == null) return;
@@ -972,14 +998,14 @@ chartEl.addEventListener('pointermove', e => {
   const o = drag.orig, round = v => Math.round(v * 100) / 100;
   if (drag.handle) {
     // 손잡이: 그 꼭짓점만 손가락 위치로
-    const f = { [drag.handle.pk]: round(p) };
+    const f = drag.handle.pk ? { [drag.handle.pk]: round(p) } : {};
     if (drag.handle.tk) f[drag.handle.tk] = chartToMs(logicalToTime(l));
     drawings.patch(drag.id, f);
   } else {
     // 몸통: 가격·봉 개수만큼 통째로 이동
     const dp = p - drag.start.p, dl = Math.round(l - drag.start.l);
     const shiftT = t => chartToMs(logicalToTime(timeToLogical(msToChart(t)) + dl));
-    const f = { p: round(o.p + dp) };
+    const f = o.p != null ? { p: round(o.p + dp) } : {};
     if (o.t != null) f.t = shiftT(o.t);
     if (o.type === 'box') { f.p2 = round(o.p2 + dp); f.t2 = shiftT(o.t2); }
     drawings.patch(drag.id, f);
@@ -1026,6 +1052,7 @@ function onTap(x, y) {
   if (!pt) return;
   const c = toolColors[tool];
   if (tool === 'hline') drawings.add({ type: 'hline', p: pt.p, c });
+  else if (tool === 'vline') drawings.add({ type: 'vline', t: pt.t, c });
   else if (tool === 'dot') drawings.add({ type: 'dot', t: pt.t, p: pt.p, c });
   else if (tool === 'ray') drawings.add({ type: 'ray', t: pt.t, p: pt.p, c });
   else if (tool === 'text') { setTool(null); openTextModal({ mode: 'new', pt, c }, ''); return; }
@@ -1252,7 +1279,7 @@ document.addEventListener('keydown', e => {
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && drawings.getSel()) { $('hintDelete').click(); return; }
   if (document.querySelector('.backdrop.show')) return;
-  const map = { h: 'hline', b: 'box', d: 'dot', r: 'ray', t: 'text', e: 'erase' };
+  const map = { h: 'hline', v: 'vline', b: 'box', d: 'dot', r: 'ray', t: 'text', e: 'erase' };
   const k = e.key.toLowerCase();
   if (map[k]) setTool(tool === map[k] ? null : map[k]);
   else if (k === 'g') $('gotoBtn').click();
