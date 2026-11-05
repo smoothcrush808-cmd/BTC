@@ -65,6 +65,7 @@ const EDGE = 150;                // 가장자리에서 이 정도 봉 남으면 
 const STORE_KEY = 'psychChart.drawings.v1';
 const PREF_KEY = 'psychChart.prefs.v1';
 const BM_KEY = 'psychChart.bookmarks.v1';
+const SYNC_KEY = 'psychChart.sync.v1';
 
 const IVS = { '5m': 300, '15m': 900, '1h': 3600 };
 
@@ -559,12 +560,51 @@ const toolColors = { ...DEFAULT_COLOR };
 for (const [k, v] of Object.entries(store.get(PREF_KEY, {}).colors || {})) if (k in toolColors && isHex(v)) toolColors[k] = v;
 function saveToolColors() { store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), colors: toolColors }); }
 
+// ───────────────────────── 기기 간 동기화를 위한 변경 기록
+// 항목마다 마지막으로 바뀐 시각 u(ms)를 달고, 지운 항목은 '지움 기록'(id → 지운 시각)으로 남긴다.
+// 저장할 때 직전 저장본과 비교해서 바뀐 것만 u를 새로 찍으므로, 되돌리기로 되살린 것도 '최신 변경'이 된다.
+function changeTracker(items, tombs) {
+  const keyOf = d => { const { u, ...rest } = d; return JSON.stringify(rest); };
+  let saved = new Map(items.map(d => [d.id, keyOf(d)]));
+  return {
+    stamp(list) {
+      const now = Date.now();
+      const ids = new Set();
+      for (const d of list) {
+        ids.add(d.id);
+        if (saved.get(d.id) !== keyOf(d)) { d.u = now; delete tombs[d.id]; }
+      }
+      for (const id of saved.keys()) if (!ids.has(id)) tombs[id] = now;
+      saved = new Map(list.map(d => [d.id, keyOf(d)]));
+    },
+    reset(list) { saved = new Map(list.map(d => [d.id, keyOf(d)])); },
+  };
+}
+// 두 기기 내용 합치기: 같은 항목은 더 늦게 바뀐 쪽, 지움 기록이 더 늦으면 지운 것으로
+function mergeSide(aItems, aTombs, bItems, bTombs) {
+  const tombs = { ...bTombs };
+  for (const [id, ts] of Object.entries(aTombs || {})) tombs[id] = Math.max(ts, tombs[id] || 0);
+  const byId = new Map();
+  for (const d of [...(bItems || []), ...(aItems || [])]) {
+    const cur = byId.get(d.id);
+    if (!cur || (d.u || 0) >= (cur.u || 0)) byId.set(d.id, d);
+  }
+  const items = [...byId.values()].filter(d => !((tombs[d.id] || -1) >= (d.u || 0)));
+  const old = Date.now() - 180 * 86400000; // 반년 지난 지움 기록은 정리
+  for (const id of Object.keys(tombs)) if (tombs[id] < old) delete tombs[id];
+  return { items, tombs };
+}
+
 // ───────────────────────── 그림 (시각·가격으로 저장 → 확대·스크롤·간격 변경에도 따라온다)
 // 저장 형식: { id, type: 'hline'|'vline'|'ray'|'dot'|'box'|'text', p?, t?, p2?, t2?, c?, text? }  (t = 실제 UTC ms, c = 색 #rrggbb)
 const TEXT_FONT = "600 13px 'Pretendard Variable', -apple-system, sans-serif";
 const TEXT_MAX = 60;
 const drawings = (() => {
-  let list = (store.get(STORE_KEY, { drawings: [] }).drawings || []).filter(valid);
+  const stored = store.get(STORE_KEY, { drawings: [] }) || {};
+  let list = (stored.drawings || []).filter(valid);
+  let tombs = stored.deleted && typeof stored.deleted === 'object' ? stored.deleted : {};
+  const tracker = changeTracker(list, tombs);
+  let onChange = () => {};
   let pending = null;   // 박스 첫 꼭짓점 {t, p}
   let preview = null;   // 박스 미리보기 둘째 꼭짓점 {t, p}
   let hot = null;       // 지우기 후보 id
@@ -594,13 +634,15 @@ const drawings = (() => {
       default: return false;
     }
   }
-  function persist() {
-    if (!store.set(STORE_KEY, { version: 1, drawings: list })) {
+  function persist(fromSync = false) {
+    if (!fromSync) tracker.stamp(list);
+    if (!store.set(STORE_KEY, { version: 2, drawings: list, deleted: tombs })) {
       toast('이 브라우저에 저장하지 못했습니다 (개인정보 보호 모드?) — 내보내기로 백업하세요', { error: true, ms: 6000 });
     }
     rebuildAxis();
     requestUpdate();
     $('drawCount').textContent = list.length;
+    if (!fromSync) onChange();
   }
 
   // 가격축 라벨: 수평선·레이 / 시간축 라벨: 수직선
@@ -803,6 +845,17 @@ const drawings = (() => {
       return true;
     },
     onHistory(cb) { onHistory = cb; cb(history.length); },
+    // 동기화용
+    onChange(cb) { onChange = cb; },
+    syncState: () => ({ items: list.map(d => ({ ...d })), tombs: { ...tombs } }),
+    applySync(items, newTombs) {
+      list = items.filter(valid).map(d => ({ ...d }));
+      for (const k of Object.keys(tombs)) delete tombs[k];
+      Object.assign(tombs, newTombs);
+      tracker.reset(list);
+      hot = null;
+      persist(true);
+    },
     get: id => list.find(d => d.id === id) || null,
     // 끄는 동안은 그리기만 다시 하고, 손을 뗄 때 save()로 저장
     patch(id, fields) { const d = list.find(x => x.id === id); if (d) { Object.assign(d, fields); requestUpdate(); } },
@@ -1083,10 +1136,16 @@ chart.subscribeCrosshairMove(param => {
 const bookmarks = (() => {
   const ok = b => b && typeof b.id === 'string' && typeof b.name === 'string'
     && Number.isFinite(b.t) && IVS[b.iv] && Number.isFinite(b.w);
-  let list = (store.get(BM_KEY, []) || []).filter(ok);
-  const persist = () => {
-    if (!store.set(BM_KEY, list)) toast('이 브라우저에 저장하지 못했습니다', { error: true });
+  const raw = store.get(BM_KEY, []) || [];
+  let list = (Array.isArray(raw) ? raw : raw.items || []).filter(ok);
+  let tombs = (!Array.isArray(raw) && raw.deleted) || {};
+  const tracker = changeTracker(list, tombs);
+  let onChange = () => {};
+  const persist = (fromSync = false) => {
+    if (!fromSync) tracker.stamp(list);
+    if (!store.set(BM_KEY, { items: list, deleted: tombs })) toast('이 브라우저에 저장하지 못했습니다', { error: true });
     render();
+    if (!fromSync) onChange();
   };
 
   function render() {
@@ -1148,7 +1207,20 @@ const bookmarks = (() => {
   }
 
   render();
-  return { all: () => list.slice(), count: () => list.length, saveCurrent, importMany, goTo };
+  function applySync(items, newTombs) {
+    list = items.filter(ok).map(b => ({ ...b }));
+    list.sort((a, b) => b.id.localeCompare(a.id));
+    for (const k of Object.keys(tombs)) delete tombs[k];
+    Object.assign(tombs, newTombs);
+    tracker.reset(list);
+    persist(true);
+  }
+  return {
+    all: () => list.map(({ u, ...b }) => b), count: () => list.length, saveCurrent, importMany, goTo,
+    onChange(cb) { onChange = cb; },
+    syncState: () => ({ items: list.map(b => ({ ...b })), tombs: { ...tombs } }),
+    applySync,
+  };
 })();
 
 $('bmSave').addEventListener('click', () => { bookmarks.saveCurrent($('bmName').value); $('bmName').value = ''; });
@@ -1298,6 +1370,147 @@ $('wideBtn')?.addEventListener('click', () => {
 });
 window.addEventListener('resize', () => wide.apply(wantWide));
 
+// ───────────────────────── 기기 간 자동 동기화 (GitHub 비공개 Gist)
+// 열쇠(토큰)는 이 기기 브라우저에만 저장. 그림·북마크만 맞추고 화면 설정(와이드·색 등)은 기기마다 따로.
+const sync = (() => {
+  const FILE = 'btc-psych-chart.json';
+  const DESC = 'BTC 심리차트 동기화 (자동 생성 — 지우지 마세요)';
+  let cfg = store.get(SYNC_KEY, null);
+  let running = false, again = false, timer = 0, lastErr = '';
+
+  async function gh(path, opts = {}) {
+    const res = await fetch('https://api.github.com' + path, {
+      ...opts,
+      headers: {
+        Authorization: 'Bearer ' + cfg.token,
+        Accept: 'application/vnd.github+json',
+        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      const e = new Error(res.status === 401 ? '열쇠가 틀렸거나 만료됐습니다' : res.status === 404 ? 'not-found' : `GitHub 오류 ${res.status}`);
+      e.status = res.status; throw e;
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  // 비교가 순서에 흔들리지 않게 정렬해서 직렬화
+  const sorted = o => Object.fromEntries(Object.entries(o || {}).sort(([a], [b]) => a.localeCompare(b)));
+  const byId = arr => [...(arr || [])].sort((a, b) => a.id.localeCompare(b.id));
+  const payload = (d, b) => JSON.stringify({
+    app: 'btc-psych-chart', version: 2,
+    drawings: byId(d.items), deleted: sorted(d.tombs), bookmarks: byId(b.items), bookmarksDeleted: sorted(b.tombs),
+  });
+
+  async function readRemote() {
+    const g = await gh(`/gists/${cfg.gistId}`);
+    const f = g.files && g.files[FILE];
+    if (!f) return {};
+    let text = f.content;
+    if (f.truncated) text = await (await fetch(f.raw_url, { cache: 'no-store' })).text();
+    try { return JSON.parse(text || '{}'); } catch { return {}; }
+  }
+
+  async function findOrCreateGist() {
+    const list = await gh('/gists?per_page=100');
+    const hit = list.find(g => g.files && g.files[FILE]);
+    if (hit) return hit.id;
+    const g = await gh('/gists', {
+      method: 'POST',
+      body: JSON.stringify({ description: DESC, public: false, files: { [FILE]: { content: payload(drawings.syncState(), bookmarks.syncState()) } } }),
+    });
+    return g.id;
+  }
+
+  async function syncNow() {
+    if (!cfg || !cfg.token) return;
+    if (running || drag) { again = true; return; } // 끄는 도중엔 미룬다
+    running = true; again = false;
+    setStatus('동기화 중…');
+    try {
+      if (!cfg.gistId) { cfg.gistId = await findOrCreateGist(); store.set(SYNC_KEY, cfg); }
+      let remote;
+      try { remote = await readRemote(); }
+      catch (e) {
+        if (e.status !== 404) throw e;
+        cfg.gistId = await findOrCreateGist(); store.set(SYNC_KEY, cfg); // Gist가 지워졌으면 새로
+        remote = await readRemote();
+      }
+      const ld = drawings.syncState(), lb = bookmarks.syncState();
+      const md = mergeSide(ld.items, ld.tombs, remote.drawings, remote.deleted);
+      const mb = mergeSide(lb.items, lb.tombs, remote.bookmarks, remote.bookmarksDeleted);
+      const out = payload(md, mb);
+      if (payload(ld, lb) !== out) {
+        const sid = drawings.getSel();
+        drawings.applySync(md.items, md.tombs);
+        bookmarks.applySync(mb.items, mb.tombs);
+        if (sid && !drawings.get(sid)) select(null);
+      }
+      if (payload({ items: remote.drawings || [], tombs: remote.deleted || {} }, { items: remote.bookmarks || [], tombs: remote.bookmarksDeleted || {} }) !== out) {
+        await gh(`/gists/${cfg.gistId}`, { method: 'PATCH', body: JSON.stringify({ files: { [FILE]: { content: out } } }) });
+      }
+      cfg.last = Date.now(); store.set(SYNC_KEY, cfg);
+      lastErr = '';
+      setStatus();
+    } catch (e) {
+      const msg = e.message === 'not-found' ? 'Gist를 찾지 못했습니다' : e.message;
+      if (msg !== lastErr) toast('동기화 실패 — ' + msg, { error: true, ms: 5000 });
+      lastErr = msg;
+      setStatus('⚠ ' + msg);
+    } finally {
+      running = false;
+      if (again) setTimeout(syncNow, 500);
+    }
+  }
+
+  function soon() { clearTimeout(timer); timer = setTimeout(syncNow, 2000); }
+
+  function setStatus(text) {
+    const on = !!(cfg && cfg.token);
+    $('syncOff').hidden = on; $('syncOn').hidden = !on;
+    const t = cfg && cfg.last ? new Date(cfg.last + KST * 1000) : null;
+    $('syncStatus').textContent = !on ? '꺼짐 — 이 기기에만 저장 중'
+      : text || (t ? `켜짐 · 마지막 동기화 ${pad(t.getUTCMonth() + 1)}.${pad(t.getUTCDate())} ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}` : '켜짐');
+    $('syncStatus').className = 'sync-status' + (on ? ' on' : '') + (text && text.startsWith('⚠') ? ' err' : '');
+  }
+
+  async function connect(token) {
+    token = (token || '').trim();
+    if (!token) { toast('열쇠(토큰)를 붙여넣으세요', { error: true }); return; }
+    cfg = { token };
+    setStatus('연결 중…');
+    try {
+      await gh('/user');
+      store.set(SYNC_KEY, cfg);
+      $('syncToken').value = '';
+      await syncNow();
+      if (!lastErr) toast('☁ 동기화를 켰습니다 — 다른 기기에도 같은 열쇠를 넣으세요');
+    } catch (e) {
+      cfg = null; store.set(SYNC_KEY, null);
+      toast('연결 실패 — ' + e.message, { error: true, ms: 6000 });
+      setStatus();
+    }
+  }
+  function disconnect() {
+    if (!confirm('이 기기의 동기화를 끌까요? (그림은 이 기기에 그대로 남고, GitHub의 사본도 지워지지 않습니다)')) return;
+    cfg = null;
+    try { localStorage.removeItem(SYNC_KEY); } catch {}
+    setStatus();
+  }
+
+  drawings.onChange(soon);
+  bookmarks.onChange(soon);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+  setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, 60000);
+  $('syncConnect').addEventListener('click', () => connect($('syncToken').value));
+  $('syncToken').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('syncToken').value); });
+  $('syncNowBtn').addEventListener('click', syncNow);
+  $('syncDisconnect').addEventListener('click', disconnect);
+  setStatus();
+  return { syncNow, isOn: () => !!(cfg && cfg.token) };
+})();
+
 // ───────────────────────── 시작
 const prefs = store.get(PREF_KEY, {});
 wantWide = !!prefs.wide;
@@ -1307,7 +1520,8 @@ document.querySelectorAll('#ivSeg button').forEach(b => b.classList.toggle('on',
 updateLegend();
 loadLatest();
 connectWs();
+sync.syncNow();
 
 // 디버그·테스트용
-window.__psych = { S, chart, series, drawings, bookmarks, jumpTo, switchInterval, wide };
+window.__psych = { S, chart, series, drawings, bookmarks, sync, jumpTo, switchInterval, wide };
 })();
