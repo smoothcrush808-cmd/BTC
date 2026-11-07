@@ -597,7 +597,12 @@ function mergeSide(aItems, aTombs, bItems, bTombs) {
 
 // ───────────────────────── 그림 (시각·가격으로 저장 → 확대·스크롤·간격 변경에도 따라온다)
 // 저장 형식: { id, type: 'hline'|'vline'|'ray'|'dot'|'box'|'text', p?, t?, p2?, t2?, c?, text? }  (t = 실제 UTC ms, c = 색 #rrggbb)
-const TEXT_FONT = "600 13px 'Pretendard Variable', -apple-system, sans-serif";
+// 글자 크기 4단계 (px). 크기 정보가 없는 예전 글은 '보통'으로
+const TEXT_SIZES = [{ px: 12, name: '작게' }, { px: 15, name: '보통' }, { px: 19, name: '크게' }, { px: 26, name: '아주 크게' }];
+const TEXT_DEFAULT = 15;
+const textSizeOf = d => (Number.isFinite(d.s) && d.s >= 8 && d.s <= 48 ? d.s : TEXT_DEFAULT);
+const textFont = px => `600 ${px}px 'Pretendard Variable', -apple-system, sans-serif`;
+let toolTextSize = (() => { const v = store.get(PREF_KEY, {}).textSize; return TEXT_SIZES.some(x => x.px === v) ? v : TEXT_DEFAULT; })();
 const TEXT_MAX = 60;
 const drawings = (() => {
   const stored = store.get(STORE_KEY, { drawings: [] }) || {};
@@ -619,7 +624,7 @@ const drawings = (() => {
     onHistory(history.length);
   }
   const measure = document.createElement('canvas').getContext('2d');
-  function textWidth(t) { measure.font = TEXT_FONT; return measure.measureText(t).width; }
+  function textWidth(t, px) { measure.font = textFont(px); return measure.measureText(t).width; }
   let axisViews = [];
 
   function valid(d) {
@@ -736,11 +741,12 @@ const drawings = (() => {
       }
       case 'text': {
         const x = cx(d); if (x == null) break;
-        ctx.font = TEXT_FONT; ctx.textBaseline = 'middle';
+        const px = textSizeOf(d);
+        ctx.font = textFont(px); ctx.textBaseline = 'middle';
         // 캔들 위에서도 읽히게 옅은 어두운 바탕
-        const tw = textWidth(d.text);
+        const tw = textWidth(d.text, px);
         ctx.fillStyle = 'rgba(10,14,20,0.6)';
-        ctx.fillRect(x + 1, y - 10, tw + 6, 20);
+        ctx.fillRect(x + 1, y - px * 0.75, tw + 6, px * 1.5);
         ctx.fillStyle = isHot ? C.erase : color;
         ctx.fillText(d.text, x + 4, y);
         break;
@@ -790,7 +796,8 @@ const drawings = (() => {
         dist = px >= x ? Math.abs(py - y) : Math.hypot(px - x, py - y);
       } else if (d.type === 'text') {
         const x = cx(d); if (x == null) continue;
-        const l = x, r = x + 4 + textWidth(d.text), t = y - 9, b = y + 9;
+        const fs = textSizeOf(d); // 이름 주의: px는 탭 위치
+        const l = x, r = x + 4 + textWidth(d.text, fs), t = y - fs * 0.75, b = y + fs * 0.75;
         dist = Math.hypot(Math.max(l - px, 0, px - r), Math.max(t - py, 0, py - b));
       } else if (d.type === 'box') {
         const x1 = cx(d), x2 = timeToX(msToChart(d.t2)), y2 = cy(d.p2);
@@ -881,7 +888,7 @@ const drawings = (() => {
         if (d.t != null) clean.t = d.t;
         if (d.type === 'box') { clean.p2 = d.p2; clean.t2 = d.t2; }
         if (isHex(d.c)) clean.c = d.c;
-        if (d.type === 'text') clean.text = d.text;
+        if (d.type === 'text') { clean.text = d.text; if (Number.isFinite(d.s)) clean.s = d.s; }
         list.push(clean); have.add(d.id); added++;
       }
       if (!added) { history.pop(); onHistory(history.length); }
@@ -953,6 +960,30 @@ function renderSwatches() {
     });
     box.appendChild(b);
   }
+  renderSizes(type, sd);
+}
+
+// 글자 크기 고르기 (텍스트일 때만)
+function renderSizes(type, sd) {
+  const box = $('sizes');
+  box.hidden = type !== 'text';
+  if (type !== 'text') return;
+  const cur = sd ? textSizeOf(sd) : toolTextSize;
+  box.innerHTML = '';
+  for (const z of TEXT_SIZES) {
+    const b = document.createElement('button');
+    b.className = 'sz' + (z.px === cur ? ' on' : '');
+    b.textContent = z.name;
+    b.style.fontSize = Math.min(z.px, 17) + 'px';
+    b.addEventListener('click', () => {
+      toolTextSize = z.px; store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), textSize: z.px });
+      const id = drawings.getSel();
+      if (id) { drawings.snapshot(); drawings.patch(id, { s: z.px }); drawings.save(); }
+      drawings.refresh();
+      renderSwatches();
+    });
+    box.appendChild(b);
+  }
 }
 
 // 그림 선택(수정 모드): 선택 중엔 차트 끌기·확대를 잠가서 손가락이 그림만 움직이게 한다
@@ -988,6 +1019,7 @@ function openTextModal(ctx, value) {
   textCtx = ctx;
   $('textInput').value = value || '';
   openModal('textModal');
+  $('textInput').focus(); // 바로 쳐도 첫 글자가 빠지지 않게
   setTimeout(() => $('textInput').focus(), 0);
 }
 function commitText() {
@@ -995,7 +1027,7 @@ function commitText() {
   closeModal($('textModal'));
   const ctx = textCtx; textCtx = null;
   if (!ctx || !v) return;
-  if (ctx.mode === 'new') drawings.add({ type: 'text', t: ctx.pt.t, p: ctx.pt.p, c: ctx.c, text: v });
+  if (ctx.mode === 'new') drawings.add({ type: 'text', t: ctx.pt.t, p: ctx.pt.p, c: ctx.c, s: toolTextSize, text: v });
   else if (drawings.get(ctx.id) && drawings.get(ctx.id).text !== v) {
     drawings.snapshot(); drawings.patch(ctx.id, { text: v }); drawings.save();
   }
