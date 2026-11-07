@@ -55,6 +55,8 @@
 
   .app {
     height:100vh; height:100dvh;
+    /* 아이폰 홈 화면 앱은 100dvh가 상태바 높이만큼 짧아 아래가 빈다 → 실제 창 높이(JS가 넣음)로 */
+    height:var(--vh, 100dvh);
     display:grid;
     grid-template-columns: 60px 1fr;
     grid-template-rows: auto 1fr;
@@ -448,6 +450,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <!-- 고칠 때마다 v를 올린다: 배포 직후 브라우저가 옛 app.js를 쓰지 않도록 -->
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
