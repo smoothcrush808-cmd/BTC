@@ -602,6 +602,14 @@ const TEXT_SIZES = [{ px: 12, name: '작게' }, { px: 15, name: '보통' }, { px
 const TEXT_DEFAULT = 15;
 const textSizeOf = d => (Number.isFinite(d.s) && d.s >= 8 && d.s <= 48 ? d.s : TEXT_DEFAULT);
 const textFont = px => `600 ${px}px 'Pretendard Variable', -apple-system, sans-serif`;
+// 선 굵기 4단계 (px). 점은 같은 단계를 크기로 쓴다. 굵기 정보가 없는 예전 그림은 '보통'(기존 굵기)
+const LINE_WIDTHS = [{ w: 1, name: '얇게' }, { w: 1.5, name: '보통' }, { w: 2.5, name: '굵게' }, { w: 4, name: '아주 굵게' }];
+const LINE_DEFAULT = 1.5;
+const WIDTH_TYPES = ['hline', 'vline', 'ray', 'box', 'dot'];
+const DOT_R = { 1: 3.5, 1.5: 4.5, 2.5: 6, 4: 8 };
+const widthOf = d => (LINE_WIDTHS.some(x => x.w === d.w) ? d.w : LINE_DEFAULT);
+const toolWidths = Object.fromEntries(WIDTH_TYPES.map(t => [t, LINE_DEFAULT]));
+for (const [k, v] of Object.entries(store.get(PREF_KEY, {}).widths || {})) if (k in toolWidths && LINE_WIDTHS.some(x => x.w === v)) toolWidths[k] = v;
 let toolTextSize = (() => { const v = store.get(PREF_KEY, {}).textSize; return TEXT_SIZES.some(x => x.px === v) ? v : TEXT_DEFAULT; })();
 const TEXT_MAX = 60;
 const drawings = (() => {
@@ -688,16 +696,17 @@ const drawings = (() => {
     if (pending) {
       const c = toolColors.box;
       const a = { type: 'dot', t: pending.t, p: pending.p, c };
-      if (preview) drawOne(ctx, { type: 'box', t: pending.t, p: pending.p, t2: preview.t, p2: preview.p, c }, w, h, false, true);
+      if (preview) drawOne(ctx, { type: 'box', t: pending.t, p: pending.p, t2: preview.t, p2: preview.p, c, w: toolWidths.box }, w, h, false, true);
       drawOne(ctx, a, w, h, false);
     }
   }
 
   function drawOne(ctx, d, w, h, isHot, ghost = false) {
+    const lw = widthOf(d);
     if (d.type === 'vline') {
       const x = cx(d); if (x == null) return;
       ctx.save();
-      ctx.lineWidth = isHot ? 2.5 : 1.5;
+      ctx.lineWidth = isHot ? lw + 1 : lw;
       ctx.strokeStyle = isHot ? C.erase : colorOf(d);
       ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, 0); ctx.lineTo(Math.round(x) + 0.5, h); ctx.stroke();
       ctx.restore();
@@ -706,7 +715,7 @@ const drawings = (() => {
     const y = cy(d.p);
     if (y == null) return;
     ctx.save();
-    ctx.lineWidth = isHot ? 2.5 : 1.5;
+    ctx.lineWidth = isHot ? lw + 1 : lw;
     const color = colorOf(d);
     switch (d.type) {
       case 'hline': {
@@ -720,14 +729,15 @@ const drawings = (() => {
         ctx.strokeStyle = col; ctx.fillStyle = col;
         const yy = Math.round(y) + 0.5;
         ctx.beginPath(); ctx.moveTo(Math.max(x, -10), yy); ctx.lineTo(w, yy); ctx.stroke();
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, Math.max(3, lw + 1.5), 0, Math.PI * 2); ctx.fill();
         break;
       }
       case 'dot': {
         const x = cx(d); if (x == null) break;
         ctx.fillStyle = isHot ? C.erase : color;
         ctx.strokeStyle = C.bg; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(x, y, isHot ? 6 : 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const r = DOT_R[lw] || 4.5;
+        ctx.beginPath(); ctx.arc(x, y, isHot ? r + 1.5 : r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         break;
       }
       case 'box': {
@@ -889,6 +899,7 @@ const drawings = (() => {
         if (d.type === 'box') { clean.p2 = d.p2; clean.t2 = d.t2; }
         if (isHex(d.c)) clean.c = d.c;
         if (d.type === 'text') { clean.text = d.text; if (Number.isFinite(d.s)) clean.s = d.s; }
+        if (LINE_WIDTHS.some(x => x.w === d.w)) clean.w = d.w;
         list.push(clean); have.add(d.id); added++;
       }
       if (!added) { history.pop(); onHistory(history.length); }
@@ -961,6 +972,32 @@ function renderSwatches() {
     box.appendChild(b);
   }
   renderSizes(type, sd);
+  renderWidths(type, sd);
+}
+
+// 선 굵기 고르기 (선·박스·점)
+function renderWidths(type, sd) {
+  const box = $('widths');
+  box.hidden = !WIDTH_TYPES.includes(type);
+  if (box.hidden) return;
+  const cur = sd ? widthOf(sd) : toolWidths[type];
+  box.innerHTML = '';
+  for (const z of LINE_WIDTHS) {
+    const b = document.createElement('button');
+    b.className = 'lw' + (z.w === cur ? ' on' : '');
+    b.title = z.name;
+    b.innerHTML = type === 'dot'
+      ? `<svg viewBox="0 0 32 18" width="32" height="18"><circle cx="16" cy="9" r="${DOT_R[z.w]}" fill="currentColor"/></svg>`
+      : `<svg viewBox="0 0 32 18" width="32" height="18"><line x1="3" y1="9" x2="29" y2="9" stroke="currentColor" stroke-width="${z.w}" stroke-linecap="round"/></svg>`;
+    b.addEventListener('click', () => {
+      toolWidths[type] = z.w; store.set(PREF_KEY, { ...store.get(PREF_KEY, {}), widths: toolWidths });
+      const id = drawings.getSel();
+      if (id) { drawings.snapshot(); drawings.patch(id, { w: z.w }); drawings.save(); }
+      drawings.refresh();
+      renderSwatches();
+    });
+    box.appendChild(b);
+  }
 }
 
 // 글자 크기 고르기 (텍스트일 때만)
@@ -1135,17 +1172,17 @@ function onTap(x, y) {
   }
   const pt = pointAt(x, y);
   if (!pt) return;
-  const c = toolColors[tool];
-  if (tool === 'hline') drawings.add({ type: 'hline', p: pt.p, c });
-  else if (tool === 'vline') drawings.add({ type: 'vline', t: pt.t, c });
-  else if (tool === 'dot') drawings.add({ type: 'dot', t: pt.t, p: pt.p, c });
-  else if (tool === 'ray') drawings.add({ type: 'ray', t: pt.t, p: pt.p, c });
+  const c = toolColors[tool], w = toolWidths[tool];
+  if (tool === 'hline') drawings.add({ type: 'hline', p: pt.p, c, w });
+  else if (tool === 'vline') drawings.add({ type: 'vline', t: pt.t, c, w });
+  else if (tool === 'dot') drawings.add({ type: 'dot', t: pt.t, p: pt.p, c, w });
+  else if (tool === 'ray') drawings.add({ type: 'ray', t: pt.t, p: pt.p, c, w });
   else if (tool === 'text') { setTool(null); openTextModal({ mode: 'new', pt, c }, ''); return; }
   else if (tool === 'box') {
     const first = drawings.getPending();
     if (!first) { drawings.setPending(pt); showHint(HINTS.box2); return; }
     if (first.t === pt.t && first.p === pt.p) return;
-    drawings.add({ type: 'box', t: first.t, p: first.p, t2: pt.t, p2: pt.p, c });
+    drawings.add({ type: 'box', t: first.t, p: first.p, t2: pt.t, p2: pt.p, c, w });
   }
   setTool(null);
 }
