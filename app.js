@@ -47,11 +47,23 @@ const wide = (() => {
     return Array.from(list, r => new DOMRect(r.top, W() - r.right, r.height, r.width));
   };
 
+  // 앱 높이: 아이폰 홈 화면 앱(상태바 투명)은 innerHeight·100dvh 모두 상태바 높이만큼 짧게 나와
+  // 아래가 빈다. 홈 화면 앱은 언제나 화면 전체를 쓰므로 그때만 실제 화면 높이를 쓴다.
+  // (키보드가 올라와 크게 줄어든 경우는 건드리지 않음)
+  function appHeight() {
+    const h = window.innerHeight;
+    const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+    if (!standalone || !screen.width || !screen.height) return h;
+    const portrait = window.innerWidth < h;
+    const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    return full > h && full - h <= 80 ? full : h;
+  }
+
   function apply(want) {
     // 폰을 실제로 가로로 돌렸으면 이중 회전이 되므로 끈다 (옛 index.html이면 #root가 없어 못 켬)
     on = !!want && !!root && window.innerWidth < window.innerHeight && window.innerWidth <= 720;
     html.style.setProperty('--vw', window.innerWidth + 'px');
-    html.style.setProperty('--vh', window.innerHeight + 'px');
+    html.style.setProperty('--vh', appHeight() + 'px');
     html.classList.toggle('wide', on);
     const b = document.getElementById('wideBtn');
     if (b) b.classList.toggle('on', !!want);
